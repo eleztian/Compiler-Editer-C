@@ -1,6 +1,7 @@
 
 from PyQt5.QtCore import QFile, QRegExp, Qt
 from PyQt5.QtGui import QFont, QSyntaxHighlighter, QTextCharFormat
+from ui_pyqt5.edit import customcompleter_rc
 
 class Highlighter(QSyntaxHighlighter):
     def __init__(self, parent=None):

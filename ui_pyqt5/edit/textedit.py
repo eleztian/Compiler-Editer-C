@@ -2,8 +2,8 @@ from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
 
-from edit.highlight import Highlighter
-from edit import customcompleter_rc
+from ui_pyqt5.edit.highlight import Highlighter
+
 
 class TextEdit(QTextEdit):
     def __init__(self, parent=None):

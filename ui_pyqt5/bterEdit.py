@@ -1,12 +1,9 @@
-import sys
+from PyQt5.QtCore import (QTimer, Qt)
+from PyQt5.QtGui import QFont
+from PyQt5.QtWidgets import (QLabel, QGridLayout,
+                             QWidget)
 
-from PyQt5.QtCore import (QFile, QFileInfo, QSettings, QTimer, Qt, QByteArray)
-from PyQt5.QtGui import QIcon, QFont, QKeySequence, QTextDocumentWriter
-from PyQt5.QtWidgets import (QAction, QApplication, QFileDialog, QLabel, QGridLayout,
-                             QMainWindow, QMessageBox, QTextEdit,
-                             QWidget, QDockWidget)
-
-from edit.textedit import TextEdit
+from ui_pyqt5.edit.textedit import TextEdit
 
 __version__ = "1.0.0"
 
