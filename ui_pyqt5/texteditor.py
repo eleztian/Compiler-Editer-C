@@ -7,6 +7,7 @@ from PyQt5.QtWidgets import (QAction, QApplication, QFileDialog, QGridLayout,
                              QWidget, QDockWidget, QTabBar)
 
 from ui_pyqt5.bterEdit import BterEdit
+from ui_pyqt5 import textedit_rc
 
 __version__ = "1.0.0"
 
@@ -55,9 +56,12 @@ class MainWindow(QMainWindow):
         ret = msgBox.exec()
         if ret ==  QMessageBox.Save:
             self.fileSave()
-        i = self.tab.currentIndex()  # 获取当前处于激活状态的标签
-        self.tab.removeTab(i)
-        self.layout.addWidget(self.tab)
+        elif ret == QMessageBox.Discard:
+            i = self.tab.currentIndex()  # 获取当前处于激活状态的标签
+            self.tab.removeTab(i)
+            self.layout.addWidget(self.tab)
+        else:
+            pass
 
     def setting(self):
         settings = QSettings()  # 保存用户程序当前状态，下次打开时原样恢复
