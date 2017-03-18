@@ -1,23 +1,21 @@
 import sys
 
-from PyQt5.QtCore import (QFile, QFileInfo, QSettings, QTimer, Qt, QByteArray)
-from PyQt5.QtGui import QIcon, QKeySequence, QTextDocumentWriter
+from PyQt5.QtCore import (QFile, QFileInfo, QSettings, QTimer, Qt, QByteArray,QThread,QThreadPool)
+from PyQt5.QtGui import QIcon, QKeySequence, QTextDocumentWriter,QTextCursor,QTextBlock
 from PyQt5.QtWidgets import (QAction, QApplication, QFileDialog, QGridLayout,
                              QMainWindow, QMessageBox, QTextEdit, QTabWidget,
-                             QWidget, QDockWidget, QTabBar)
-
+                             QWidget, QDockWidget, QTabBar,QPlainTextEdit,QLabel,QListWidget)
+import threading
+from logic.Lexer import Lexer
 from ui_pyqt5.bterEdit import BterEdit
-from ui_pyqt5 import textedit_rc
 
 __version__ = "1.0.0"
 
-if sys.platform.startswith('darwin'):
-    rsrcfilename = ":/images/mac"
-else:
-    rsrcfilename = ":/images/win"
+rsrcfilename = ":/images/win"
 
 class MainWindow(QMainWindow):
     filename = ""
+    docwidget = {}
     def __init__(self, parent=None):
         super(MainWindow, self).__init__(parent)
         self.setWindowIcon(QIcon(':/images/logo.png'))
@@ -38,14 +36,13 @@ class MainWindow(QMainWindow):
         self.tab.tabCloseRequested.connect(self.tab_close)
         self.tab.currentChanged.connect(self.tab_changed)
 
-        e = QTextEdit()
-        self.CreateDockWidget("test", e)
-
     def tab_changed(self):
         self.filename = self.tab.currentWidget().filename
         self.setCurrentFileName(self.filename)
 
-    def tab_close(self):
+    def tab_close(self, index):
+        self.tab.setCurrentIndex(index)
+        dock_name = QFileInfo(self.filename).fileName()
         # 关闭标签
         msgBox = QMessageBox()
         msgBox.setIcon(QMessageBox.Warning)
@@ -54,11 +51,10 @@ class MainWindow(QMainWindow):
         msgBox.setStandardButtons(QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel)
         msgBox.setDefaultButton(QMessageBox.Save)
         ret = msgBox.exec()
-        if ret ==  QMessageBox.Save:
+        if ret == QMessageBox.Save:
             self.fileSave()
         elif ret == QMessageBox.Discard:
-            i = self.tab.currentIndex()  # 获取当前处于激活状态的标签
-            self.tab.removeTab(i)
+            self.tab.removeTab(index)
             self.layout.addWidget(self.tab)
         else:
             pass
@@ -112,6 +108,8 @@ class MainWindow(QMainWindow):
         editUndoAction = self.createAction("&Undo", self.editUndo,
                                            QKeySequence.Undo, rsrcfilename + '/editundo.png',
                                            "Undo")
+        LexicalAnalysisAction = self.createAction("&Start", self.start_lexer)
+        SyntaxAnalysisAction = self.createAction("&Start", self.CreateDockWidget)
 
         fileMenu = self.menuBar().addMenu("&File")
         self.addActions(fileMenu, (fileNewAction, fileOpenAction,
@@ -121,7 +119,9 @@ class MainWindow(QMainWindow):
         self.addActions(editMenu, (editCopyAction, editCutAction,
                                    editPasteAction, editUndoAction, editRedoAction))
         lexicalAnalysisMenu = self.menuBar().addMenu("&LexicalAnalysis")
+        self.addActions(lexicalAnalysisMenu, (LexicalAnalysisAction,))
         syntaxAnalysisMenu = self.menuBar().addMenu("&SyntaxAnalysis")
+        self.addActions(syntaxAnalysisMenu, (SyntaxAnalysisAction,))
         middleCodeMenu = self.menuBar().addMenu("&MiddleCode")
         targetCodeMenu = self.menuBar().addMenu("&TargetCode")
         helpMenu = self.menuBar().addMenu("&Help")
@@ -160,13 +160,101 @@ class MainWindow(QMainWindow):
             else:
                 target.addAction(action)
 
-    def CreateDockWidget(self, name, widget):  # 定义一个createDock方法创建一个dockwidget
+    def CreateDockWidget(self):  # 定义一个createDock方法创建一个dockwidget
+        e = QTextEdit()
+        name = "test"
+        e.setPlainText(self.tab.currentWidget().e_edit.toPlainText())
         dock = QDockWidget(name)  # 实例化dockwidget类
-        dock.setWidget(widget)  # 带入的参数为一个QWidget窗体实例，将该窗体放入dock中
+        dock.setWidget(e)  # 带入的参数为一个QWidget窗体实例，将该窗体放入dock中
         dock.setObjectName(name)
         dock.setFeatures(dock.DockWidgetFloatable | dock.DockWidgetMovable)  # 设置dockwidget的各类属性
         self.addDockWidget(Qt.RightDockWidgetArea,
                            dock)  # 设置dockwidget放置在QMainWindow中的位置，并且将dockwidget添加至QMainWindow中
+
+    def show_toker_error_sign(self, token, error, sign):
+        dock_name = QFileInfo(self.filename).fileName()
+        print(dock_name)
+        try:
+            self.docwidget[dock_name]["token"].addItem("LineNo\tWord\tCode")
+            for i in token:
+                self.docwidget[dock_name]["token"].addItem(str(i[0]) + '\t' + i[1] + '\t' + str(i[2]))
+            for i in error:
+                self.docwidget[dock_name]["error"].addItem(self.lexer._error_info[i[0]] % i)
+            self.docwidget[dock_name]["sign"].addItem("Entry\tWord\tLength")
+            for index, i in enumerate(sign):
+                self.docwidget[dock_name]["sign"].addItem(str(index) + '\t' + i + '\t' + str(len(i)))
+        except Exception as e:
+            print(e)
+
+    def token_list_double_clicked_fun(self, item):
+        line_no = int(str(item.text()).split('\t')[0])
+        try:
+            edit = self.tab.currentWidget().e_edit
+            tc = edit.textCursor()
+            position = edit.document().findBlockByNumber(line_no - 1).position()
+            tc.setPosition(position, tc.KeepAnchor)
+            tc.movePosition(tc.NoMove, tc.KeepAnchor)
+            tc.select(tc.LineUnderCursor)
+            edit.setTextCursor(tc)
+            edit.setFocus()
+        except Exception as e:
+            print(e)
+
+    def error_list_double_clicked_fun(self, item):
+        # print(str(item.text()).split(" "))
+        line_no = int(str(item.text()).split(' ')[3])
+        try:
+            edit = self.tab.currentWidget().e_edit
+            tc = edit.textCursor()
+            position = edit.document().findBlockByNumber(line_no - 1).position()
+            tc.setPosition(position, tc.KeepAnchor)
+            tc.movePosition(tc.NoMove, tc.KeepAnchor)
+            tc.select(tc.LineUnderCursor)
+            edit.setTextCursor(tc)
+            edit.setFocus()
+        except Exception as e:
+            print(e)
+
+    def start_lexer(self):
+        dock_name = QFileInfo(self.filename).fileName()
+        token = QListWidget()
+        error = QListWidget()
+        sign = QListWidget()
+
+
+        self.docwidget[dock_name] = {"token": token, "error": error, "sign": sign}
+        token.itemDoubleClicked.connect(self.token_list_double_clicked_fun)
+        error.itemDoubleClicked.connect(self.error_list_double_clicked_fun)
+        try:
+            self.lexer.exit()
+        except Exception as e:
+            print(e)
+        self.lexer = Lexer(self.filename)
+        # print(self.filename)
+        self.lexer.sinOut.connect(self.show_toker_error_sign)
+        try:
+            self.lexer.start()
+        except Exception as e:
+            print(e)
+        dock_token = QDockWidget(dock_name+"_Token")  # 实例化dockwidget类
+        dock_token.setWidget(self.docwidget[dock_name]["token"])  # 带入的参数为一个QWidget窗体实例，将该窗体放入dock中
+        dock_token.setObjectName(dock_name)
+        dock_token.setFeatures(dock_token.AllDockWidgetFeatures)  # 设置dockwidget的各类属性
+        self.addDockWidget(Qt.RightDockWidgetArea, dock_token)  # 设置dockwidget放置在QMainWindow中的位置，并且将dockwidget添加至QMainWindow中
+
+        dock_error = QDockWidget(dock_name+"_Error")
+        dock_error.setWidget(self.docwidget[dock_name]["error"])
+        dock_error.setObjectName(dock_name)
+        dock_error.setFeatures(dock_error.AllDockWidgetFeatures)
+        self.addDockWidget(Qt.RightDockWidgetArea, dock_error)
+
+        dock_sign = QDockWidget(dock_name+"_sign")
+        dock_sign.setWidget(self.docwidget[dock_name]["sign"])
+        dock_sign.setObjectName(dock_name)
+        dock_sign.setFeatures(dock_sign.AllDockWidgetFeatures)
+        self.addDockWidget(Qt.RightDockWidgetArea, dock_sign)
+        self.tabifyDockWidget(dock_token, dock_error)
+        self.tabifyDockWidget(dock_error, dock_sign)
 
     def closeEvent(self, event):
         failures = []
@@ -266,6 +354,7 @@ class MainWindow(QMainWindow):
                     text = inFile.readAll()
                     text = str(text, encoding='utf-8')
                     self.tab.currentWidget().e_edit.setPlainText(text)
+                    inFile.close()
             except Exception as e:
                 QMessageBox.warning(self, "Text Editor -- Save Error",
                                     "Failed to save {0}: {1}".format(self.filename, e))
@@ -323,7 +412,7 @@ class MainWindow(QMainWindow):
     def editUndo(self):
         self.tab.currentWidget().e_edit.undo()
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     app = QApplication(sys.argv)
     app.setOrganizationName("Zhangtian.")
     app.setOrganizationDomain("elezt.cn")
@@ -331,3 +420,4 @@ if __name__ == "__main__":
     form = MainWindow()
     form.show()
     app.exec_()
+
