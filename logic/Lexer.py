@@ -1,7 +1,7 @@
 '''
 关键字：
     char double enum float int long short signed struct union unsigned void
-    for do while continue
+    for do while continue break
     if else goto
     switch case default
     return
@@ -28,13 +28,11 @@
 '''
 
 import re
-
+from PyQt5.QtCore import QThread,pyqtSignal
 # 关键字表
 
-
-
-class Lexer( object ):
-    _key = {
+class Lexer(QThread):
+    _code = {
         'char': 1,
         'double': 2,
         'enum': 3,
@@ -65,34 +63,88 @@ class Lexer( object ):
         'const': 28,
         'sizeof': 29,
         'typdef': 30,
-        'volatile': 31
+        'volatile': 31,
+        'break': 32,  # 关键字
+        '+': 33,
+        '-': 34,
+        '*': 35,
+        '/': 36,
+        '=': 37,
+        '|': 38,
+        '&': 39,
+        '!': 40,
+        '>': 41,
+        '<': 42,
+        '&&': 43,
+        '++': 44,
+        '--': 45,
+        '+=': 46,
+        '-=': 47,
+        '*=': 48,
+        '/=': 49,
+        '==': 50,
+        '|=': 51,
+        '&=': 52,
+        '!=': 53,
+        '>=': 54,
+        '<=': 55,
+        '>>=': 56,
+        '<<=': 57,
+        '||': 58,
+        '%': 59,  # 运算符
+        ',': 60,
+        '(': 61,
+        ')': 62,
+        '{': 63,
+        '}': 64,
+        '[': 65,
+        ']': 66,
+        ';': 67,
+        '//': 68,
+        '/*': 69,
+        '*/': 70,
+        ':': 71,
+        '.': 72,
+        '\\': 73,  # 界符
+        'constNum': 74,
+        'charRealNum': 75,
+        'string': 76,
+        'id': 77
     }
     # 符号表
-    other_sign = {
-        '+', '-', '*', '=', '|', '&', '>', '<'
+    _basic_arithmetic_operator = {
+        '+', '-', '*', '=', '|', '&', '>', '<', '!', '%'
     }
-    token = []
-    sign_table = set()
-
-    file_name = ""
-    file_con = ""
-
-    ISCHAR = 101
-    ISSTRING = 102
-
-    current_line = 0
-    current_row = 0
+    _delimiters = {
+        ';', ',', ':', '(', ')', '{', '}', '[', ']', '<', '>', '.', '\\'
+    }
+    _error_info = [
+        "错误 %d: 第 %d 行缺少  %s  ;",
+        "错误 %d: 第 %d 行多余  %s  ;",
+        "错误 %d: 第 %d 行不能识别的字符  %s  ;"
+    ]
 
     def __init__(self, filename):
+        super(Lexer, self).__init__()
         self.file_name = filename
+        self.file_con = ""
+        self.file_con_len = 0
+        self.current_line = 1
+        self.current_row = 0
+        self.token = []
+        self.error = []
+        self.sign_table = set()
+        self.sinOut = pyqtSignal(list, list, set)
         self.read_file()
 
     def read_file(self):
-        f = open(self.file_name, "r")
-        self.file_con = f.read()
-        # # print( f.readline() )
-        # print(self.file_con)
-        f.close()
+        try:
+            f = open(self.file_name, "r", encoding='utf8')
+            self.file_con = f.read()
+            f.close()
+        except Exception as e:
+            print(e)
+        self.file_con_len = len(self.file_con)
 
     def pre_not_notes(self):
         # ((?<=\n)|^)[ \t]*\/\*.*?\*\/\n?|\/\*.*?\*\/|((?<=\n)|^)[ \t]*\/\/[^\n]*\n|\/\/[^\n]*
@@ -104,105 +156,333 @@ class Lexer( object ):
     def start_with_alpha(self):
         index = self.current_row
         word = ''
-        while self.current_row < len(self.file_con):
-            self.current_row += 1
+        t = 0
+        while self.current_row < self.file_con_len:
             ch = self.file_con[self.current_row]
-            if not (ch.isalpha() or ch.isnumeric() or ch == '_'):
-                word = self.file_con[index: self.current_row]
-                t = 0
-                try:
-                    t = self._key[word]  # 关键字
-                except:
-                    t = 100  # 标识符
-                self.token.append((word, t))
-                self.sign_table.add(word)
+            if not (ch.isalpha() or ch.isnumeric() or ch == '_'):  # 其他字符
                 break
-
-    def start_with_multi(self):
-        # print(self.current_row, "//  : " + self.file_con[self.current_row])
-        self.current_row += 1
-        ch = self.file_con[self.current_row]
-        if ch == '*':  # /*
-            while not (self.file_con[self.current_row] == '*' and self.file_con[self.current_row+1] == '/'):
-                self.current_row += 1
-        elif ch == '/':  # //
-            while self.file_con[self.current_row + 1] is not '\n':
-                self.current_row += 1
-        else:  # /
-            # print("aaa" +self.file_con[self.current_row] )
-            word = self.file_con[self.current_row - 1]
-            self.token.append((word, 100))
-            self.sign_table.add(word)
-        self.current_row += 1
+            self.current_row += 1
+        word = self.file_con[index: self.current_row]
+        try:
+            t = self._code[word]  # 关键字
+        except:
+            t = self._code['id']
+        self.token.append((self.current_line, word, t))
+        self.sign_table.add(word)
+        self.current_row -= 1
 
     def start_with_number(self):
         index = self.current_row
-        while True:
-            break
+        state = 0
+        word = ''
+
+        def get_next_char():
+            if (self.current_row+1) < self.file_con_len:
+                self.current_row += 1
+                return self.file_con[self.current_row]
+            return None
+
+        def isnum(_state):
+            if _state == 1:
+                while _state == 1:
+                    c = get_next_char()
+                    if c.isdigit():
+                        pass
+                    elif c == '.':
+                        _state = 2
+                    elif c == 'e' or c == 'E':
+                        _state = 4
+                    else:
+                        _state = 7
+            if _state == 2:
+                while _state == 2:
+                    c = get_next_char()
+                    if c.isdigit():
+                        _state = 3
+                    else:
+                        _state = 11  # . 多余
+            if _state == 3:
+                while _state == 3:
+                    c = get_next_char()
+                    if c.isdigit():
+                        pass
+                    elif (c == 'e') or (c == 'E'):
+                        _state = 4
+                    else:
+                        _state = 7
+            if _state == 4:
+                while _state == 4:
+                    c = get_next_char()
+                    if c.isdigit():
+                        _state = 6
+                    elif (c == '+') or (c == '-'):
+                        _state = 5
+                    else:
+                        _state = 12
+            if _state == 5:
+                while _state == 5:
+                    c = get_next_char()
+                    if c.isdigit():
+                        _state = 6
+                    else:
+                        _state = 13
+            if _state == 6:
+                while _state == 6:
+                    c = get_next_char()
+                    if not c.isdigit():
+                        _state = 7
+            if _state == 9:
+                while _state == 9:
+                    c = get_next_char()
+                    if c.isdigit() or ('A' <= c <= 'F') or ('a' <= c <= 'f'):
+                        _state = 10
+                    else:
+                        _state = 14
+            if _state == 10:
+                while _state == 10:
+                    c = get_next_char()
+                    if not (c.isdigit() or ('A' <= c <= 'F') or ('a' <= c <= 'f')):
+                        _state = 7
+            # 错误判断
+            if _state == 7:
+                return True  # 没有错误
+            elif _state == 11:    # TODO: error . 多余
+                self.error.append((1, self.current_line, '.'))
+                self.current_row -= 1
+                pass
+            elif _state == 12:    # TODO: error E/e 多余
+                self.error.append((1, self.current_line, 'E/e'))
+                self.current_row -= 1
+                pass
+            elif _state == 13:    # TODO: error +/- 多余
+                self.error.append((1, self.current_line, '+/-'))
+                self.current_row -= 1
+                pass
+            elif _state == 14:      # TODO: error x/X 多余
+                self.error.append((1, self.current_line, 'x/X'))
+                self.current_row -= 1
+            return False
+
+        if self.file_con[self.current_row] == '0':
+            ch = get_next_char()
+            if (ch == 'x') or (ch == 'X'):  # 0x 0X
+                state = 9
+            elif ch.isdigit():
+                state = 1
+            else:
+                state = 7  # 结束
+        else:
+            state = 1
+        isnum(state)
+        word = self.file_con[index:self.current_row]
+        self.token.append((self.current_line, word, self._code['constNum']))
+        self.sign_table.add(word)
+        self.current_row -= 1
 
     def start_with_sign_char(self):
-        word = self.file_con[self.current_row+1]
-        if word is not '\n':
-            if self.file_con[self.current_row+2] == '\'':
-                self.token.append((self.file_con[self.current_row+1], self.ISCHAR))
-                self.sign_table.add(word)
+        if (self.current_row+1) < self.file_con_len:
+            word = self.file_con[self.current_row+1]  # 超前检测
+            if word is not '\n' and self.current_row < self.file_con_len - 2:
+                if self.file_con[self.current_row+2] == '\'':  # 超前 2位 检测
+                    self.token.append((self.current_line, word, self._code['charRealNum']))
+                    self.sign_table.add(word)
+                    self.current_row += 2
+                else:
+                    self.error.append((0, self.current_line, '\''))
+                    # TODO : 错误 缺少 ’
+
             else:
                 pass
-                # TODO : 错误 缺少 ’
+                self.error.append((1, self.current_line, '\''))
+                # TODO: 错误 多余 ‘
         else:
             pass
-            # TODO: 错误 多余 ‘
 
     def start_with_sign_string(self):
-        pass
+        self.current_row += 1
+        index = self.current_row
+        flag = 0
+        while self.current_row < self.file_con_len:
+            if self.file_con[self.current_row] is '\"':
+                word = self.file_con[index:self.current_row]
+                self.token.append((self.current_line, word, self._code['string']))
+                self.sign_table.add(word)
+                break
+            elif self.file_con[self.current_row] is '\n':
+                flag = 1
+                break
+            else:
+                self.current_row += 1
+        if flag == 1:
+            # TODO: 错误 多余"
+            self.error.append((1, self.current_line, '\"'))
+            self.current_row = index  # 回到原来位置
 
-    def start_with_sign_other(self):
-        pass
+    def start_with_sign_multi(self):
+        self.current_row += 1
+        ch = self.file_con[self.current_row]
+        if ch == '*':  # /*
+            while self.current_row < self.file_con_len - 1:
+                # print(self.file_con[self.current_row])
+                if self.file_con[self.current_row] == '\n':
+                    self.current_line += 1
+                # 超前检测
+                if not (self.file_con[self.current_row] == '*' and self.file_con[self.current_row+1] == '/'):
+                    self.current_row += 1
+                else:
+                    self.current_row += 1
+                    break
+        elif ch == '/':  # //
+            while self.current_row < self.file_con_len - 1:
+                if self.file_con[self.current_row + 1] is not '\n':  # 超前检测
+                    self.current_row += 1
+                else:
+                    self.current_row += 1
+                    break
+        elif ch == '=':  # /=
+            word = self.file_con[self.current_row-1:self.current_row+1]
+            self.token.append((self.current_line, word, self._code['/=']))
+            self.sign_table.add(word)
+        else:  # / 除法
+            self.current_row -= 1
+            word = self.file_con[self.current_row]
+            self.token.append((self.current_line, word, self._code['/']))
+            self.sign_table.add(word)
 
-    def start_with_sign_pre(self):
+    def start_with_basic_arithmetic_operator(self):
+        ch = self.file_con[self.current_row]
+        word = ''
+
+        def next_is_sign(c):
+            if self.current_row + 1 < self.file_con_len:
+                if self.file_con[self.current_row + 1] == c:
+                    self.current_row += 1
+                    return True
+            return False
+        if ch == '%':
+            if next_is_sign('='):
+                word = self.file_con[self.current_row-1:self.current_row+1]
+            else:
+                word = self.file_con[self.current_row:self.current_row+1]
+        elif ch == '!':
+            if next_is_sign('='):
+                word = self.file_con[self.current_row-1:self.current_row+1]
+            else:
+                word = self.file_con[self.current_row:self.current_row+1]
+        elif ch == '=':
+            if next_is_sign(ch):
+                word = self.file_con[self.current_row-1:self.current_row+1]
+            else:
+                word = self.file_con[self.current_row:self.current_row+1]
+        elif (ch == '+') or (ch == '-'):
+            if next_is_sign('=') or next_is_sign(ch):
+                word = self.file_con[self.current_row-1:self.current_row+1]
+            else:
+                word = self.file_con[self.current_row:self.current_row+1]
+        elif ch == '*':
+            if next_is_sign('='):
+                word = self.file_con[self.current_row-1:self.current_row+1]
+            else:
+                word = self.file_con[self.current_row:self.current_row+1]
+        elif ch == '|':
+            if next_is_sign('='):
+                word = self.file_con[self.current_row-1:self.current_row+1]
+            elif next_is_sign('|'):
+                word = self.file_con[self.current_row-1:self.current_row+1]
+            else:
+                word = self.file_con[self.current_row:self.current_row+1]
+
+        elif ch == '&':
+            if next_is_sign('='):
+                word = self.file_con[self.current_row-1:self.current_row+1]
+            elif next_is_sign('&'):
+                word = self.file_con[self.current_row-1:self.current_row+1]
+            else:
+                word = self.file_con[self.current_row:self.current_row + 1]
+        elif ch == '>':
+            if next_is_sign('='):
+                word = self.file_con[self.current_row-1:self.current_row+1]
+            elif next_is_sign('>'):
+                if next_is_sign('='):
+                    word = self.file_con[self.current_row-2:self.current_row+1]
+                else:
+                    word = self.file_con[self.current_row-1:self.current_row+1]
+            else:
+                word = self.file_con[self.current_row:self.current_row + 1]
+        elif ch == '<':
+            if next_is_sign('='):
+                word = self.file_con[self.current_row-1:self.current_row+1]
+            elif next_is_sign('<'):
+                if next_is_sign('='):
+                    word = self.file_con[self.current_row-2:self.current_row+1]
+                else:
+                    word = self.file_con[self.current_row-1:self.current_row+1]
+            else:
+                word = self.file_con[self.current_row:self.current_row + 1]
+        else:
+            return
+        self.token.append((self.current_line, word, self._code[word]))
+        self.sign_table.add(word)
+
+    def start_with_pre(self):
         # TODO: 预编译 替换字符串
         index = self.current_row
         while self.file_con[self.current_row] is not ' ':
             self.current_row += 1
         word = self.file_con[index:self.current_row]
-        self.token.append((word, self.ISCHAR))
+        self.token.append((self.current_line, word, self.ISCHAR))
+        self.sign_table.add(word)
+
+    def start_with_delimiter(self):
+        word = self.file_con[self.current_row]
+        self.token.append((self.current_line, word, self._code[word]))
         self.sign_table.add(word)
 
     def scanner(self):
         self.current_row = 0
         while self.current_row < len(self.file_con):
             ch = self.file_con[self.current_row]
-            if ch == ' ':
-                self.current_row += 1
-            else:
-                if ch.isalpha() or ch == '_':  # 关键字 标识符
+            if not (ch == ' ' or ch == '\t'):
+                if ch == '\n':
+                    self.current_line += 1
+                elif ch.isalpha() or ch == '_':  # 关键字 标识符
                     self.start_with_alpha()
-                elif ch.isalnum():  # 数字
-                    pass
+                elif ch.isdigit():  # 数字
+                    self.start_with_number()
                 elif ch == '/':  # 注释 或 除法
-                    self.start_with_multi()
+                    self.start_with_sign_multi()
                 elif ch == '#':  # #
                     pass
                 elif ch == '\'':  # 字符
                     self.start_with_sign_char()
                 elif ch == '\"':  # 字符串
-                    pass
-                elif ch in self.other_sign:
-                    pass
+                    self.start_with_sign_string()
+                elif ch in self._basic_arithmetic_operator:  # 算数运算符
+                    self.start_with_basic_arithmetic_operator()
+                elif ch in self._delimiters:
+                    self.start_with_delimiter()
                 else:
-                    pass
+                    self.error.append((2, self.current_line, ch))
+                    # TODO: 错误 无法识别的符号
             self.current_row += 1
 
-    def get_token(self):
-        pass
+    def get_token_error(self):
+        return self.token, self.error
 
+    def run(self):
+        print("run")
+        self.scanner()
+        print(self.token)
+        try:
+         self.sinOut.emit(self.token, self.error, self.sign_table)
+        except Exception as e:
+            print(e)
+        self.quit()
 
 if __name__ == '__main__':
     lexer = Lexer("testfile.c")
-    # lexer.pre_not_notes()
     lexer.scanner()
     print(lexer.sign_table)
     print(lexer.token)
-
-
-
+    for i in lexer.error:
+        print(lexer._error_info[i[0]] % i)
