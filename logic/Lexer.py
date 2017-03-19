@@ -28,7 +28,7 @@
 '''
 
 import re
-from PyQt5.QtCore import QThread,pyqtSignal
+from PyQt5.QtCore import QThread, pyqtSignal
 # 关键字表
 
 class Lexer(QThread):
@@ -92,24 +92,26 @@ class Lexer(QThread):
         '<<=': 57,
         '||': 58,
         '%': 59,  # 运算符
-        ',': 60,
-        '(': 61,
-        ')': 62,
-        '{': 63,
-        '}': 64,
-        '[': 65,
-        ']': 66,
-        ';': 67,
-        '//': 68,
-        '/*': 69,
-        '*/': 70,
-        ':': 71,
-        '.': 72,
-        '\\': 73,  # 界符
-        'constNum': 74,
-        'charRealNum': 75,
-        'string': 76,
-        'id': 77
+        '>>': 60,
+        '<<': 61,
+        ',': 62,
+        '(': 63,
+        ')': 64,
+        '{': 65,
+        '}': 66,
+        '[': 67,
+        ']': 68,
+        ';': 69,
+        '//': 70,
+        '/*': 71,
+        '*/': 72,
+        ':': 73,
+        '.': 74,
+        '\\': 75,  # 界符
+        'constNum': 76,
+        'charRealNum': 77,
+        'string': 78,
+        'id': 79
     }
     # 符号表
     _basic_arithmetic_operator = {
@@ -146,26 +148,17 @@ class Lexer(QThread):
             print(e)
         self.file_con_len = len(self.file_con)
 
-    def pre_not_notes(self):
-        # ((?<=\n)|^)[ \t]*\/\*.*?\*\/\n?|\/\*.*?\*\/|((?<=\n)|^)[ \t]*\/\/[^\n]*\n|\/\/[^\n]*
-        #/\*(.*?)\*/|//(.*?)\n
-        p = re.compile(r"((?<=\n)|^)[ \t]*\/\*.*?\*\/\n?|\/\*.*?\*\/|((?<=\n)|^)[ \t]*\/\/[^\n]*\n|\/\/[^\n]*", re.S)
-        s = p.sub('', self.file_con)
-        print(s)
-
     def start_with_alpha(self):
         index = self.current_row
         word = ''
         t = 0
         while self.current_row < self.file_con_len:
             ch = self.file_con[self.current_row]
-            if not (ch.isalpha() or ch.isnumeric() or ch == '_'):  # 其他字符
+            if not (ch.isalpha() or ch.isdigit() or ch == '_'):  # 其他字符
                 break
             self.current_row += 1
         word = self.file_con[index: self.current_row]
-        try:
-            t = self._code[word]  # 关键字
-        except:
+        if self._code.get(word) is None:  # 关键字
             t = self._code['id']
         self.token.append((self.current_line, word, t))
         self.sign_table.add(word)
@@ -351,7 +344,7 @@ class Lexer(QThread):
 
     def start_with_basic_arithmetic_operator(self):
         ch = self.file_con[self.current_row]
-        word = ''
+        index = self.current_row
 
         def next_is_sign(c):
             if self.current_row + 1 < self.file_con_len:
@@ -360,67 +353,31 @@ class Lexer(QThread):
                     return True
             return False
         if ch == '%':
-            if next_is_sign('='):
-                word = self.file_con[self.current_row-1:self.current_row+1]
-            else:
-                word = self.file_con[self.current_row:self.current_row+1]
+            next_is_sign('=')
         elif ch == '!':
-            if next_is_sign('='):
-                word = self.file_con[self.current_row-1:self.current_row+1]
-            else:
-                word = self.file_con[self.current_row:self.current_row+1]
+            next_is_sign('=')
         elif ch == '=':
-            if next_is_sign(ch):
-                word = self.file_con[self.current_row-1:self.current_row+1]
-            else:
-                word = self.file_con[self.current_row:self.current_row+1]
+            next_is_sign(ch)
         elif (ch == '+') or (ch == '-'):
             if next_is_sign('=') or next_is_sign(ch):
-                word = self.file_con[self.current_row-1:self.current_row+1]
-            else:
-                word = self.file_con[self.current_row:self.current_row+1]
+                pass
         elif ch == '*':
-            if next_is_sign('='):
-                word = self.file_con[self.current_row-1:self.current_row+1]
-            else:
-                word = self.file_con[self.current_row:self.current_row+1]
+            next_is_sign('=')
         elif ch == '|':
-            if next_is_sign('='):
-                word = self.file_con[self.current_row-1:self.current_row+1]
-            elif next_is_sign('|'):
-                word = self.file_con[self.current_row-1:self.current_row+1]
-            else:
-                word = self.file_con[self.current_row:self.current_row+1]
-
+            if next_is_sign('=') or next_is_sign("|"):
+                pass
         elif ch == '&':
-            if next_is_sign('='):
-                word = self.file_con[self.current_row-1:self.current_row+1]
-            elif next_is_sign('&'):
-                word = self.file_con[self.current_row-1:self.current_row+1]
-            else:
-                word = self.file_con[self.current_row:self.current_row + 1]
+            if next_is_sign('=') or next_is_sign("&"):
+                pass
         elif ch == '>':
-            if next_is_sign('='):
-                word = self.file_con[self.current_row-1:self.current_row+1]
-            elif next_is_sign('>'):
-                if next_is_sign('='):
-                    word = self.file_con[self.current_row-2:self.current_row+1]
-                else:
-                    word = self.file_con[self.current_row-1:self.current_row+1]
-            else:
-                word = self.file_con[self.current_row:self.current_row + 1]
+            if next_is_sign('=') or (next_is_sign(">") and next_is_sign("=")):
+                pass
         elif ch == '<':
-            if next_is_sign('='):
-                word = self.file_con[self.current_row-1:self.current_row+1]
-            elif next_is_sign('<'):
-                if next_is_sign('='):
-                    word = self.file_con[self.current_row-2:self.current_row+1]
-                else:
-                    word = self.file_con[self.current_row-1:self.current_row+1]
-            else:
-                word = self.file_con[self.current_row:self.current_row + 1]
+            if next_is_sign('=') or (next_is_sign('<') and next_is_sign('=')):
+                pass
         else:
             return
+        word = self.file_con[index:self.current_row + 1]
         self.token.append((self.current_line, word, self._code[word]))
         self.sign_table.add(word)
 
@@ -466,13 +423,8 @@ class Lexer(QThread):
                     # TODO: 错误 无法识别的符号
             self.current_row += 1
 
-    def get_token_error(self):
-        return self.token, self.error
-
     def run(self):
-        print("run")
         self.scanner()
-        print(self.token)
         try:
          self.sinOut.emit(self.token, self.error, self.sign_table)
         except Exception as e:
