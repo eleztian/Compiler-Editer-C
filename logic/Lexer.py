@@ -27,9 +27,8 @@
 
 '''
 
-import re
 from PyQt5.QtCore import QThread, pyqtSignal
-# 关键字表
+
 
 class Lexer(QThread):
     _code = {
@@ -112,19 +111,19 @@ class Lexer(QThread):
         'charRealNum': 77,
         'string': 78,
         'id': 79
-    }
-    # 符号表
+    }  # 内码表
     _basic_arithmetic_operator = {
         '+', '-', '*', '=', '|', '&', '>', '<', '!', '%'
-    }
+    }  # 符号表
     _delimiters = {
         ';', ',', ':', '(', ')', '{', '}', '[', ']', '<', '>', '.', '\\'
-    }
+    }  # 界符表
     _error_info = [
         "错误 %d: 第 %d 行缺少  %s  ;",
         "错误 %d: 第 %d 行多余  %s  ;",
         "错误 %d: 第 %d 行不能识别的字符  %s  ;"
-    ]
+    ]  # 错误信息格式列表
+    sinOut = pyqtSignal(list, list, set)
 
     def __init__(self, filename):
         super(Lexer, self).__init__()
@@ -136,16 +135,11 @@ class Lexer(QThread):
         self.token = []
         self.error = []
         self.sign_table = set()
-        self.sinOut = pyqtSignal(list, list, set)
         self.read_file()
 
     def read_file(self):
-        try:
-            f = open(self.file_name, "r", encoding='utf8')
+        with open(self.file_name, "r", encoding='utf8') as f:
             self.file_con = f.read()
-            f.close()
-        except Exception as e:
-            print(e)
         self.file_con_len = len(self.file_con)
 
     def start_with_alpha(self):
@@ -158,10 +152,13 @@ class Lexer(QThread):
                 break
             self.current_row += 1
         word = self.file_con[index: self.current_row]
-        if self._code.get(word) is None:  # 关键字
+        try:
+            t = self._code[word]   # 关键字
+            self.sign_table.add(word)
+        except:
             t = self._code['id']
         self.token.append((self.current_line, word, t))
-        self.sign_table.add(word)
+
         self.current_row -= 1
 
     def start_with_number(self):
@@ -316,7 +313,6 @@ class Lexer(QThread):
         ch = self.file_con[self.current_row]
         if ch == '*':  # /*
             while self.current_row < self.file_con_len - 1:
-                # print(self.file_con[self.current_row])
                 if self.file_con[self.current_row] == '\n':
                     self.current_line += 1
                 # 超前检测
@@ -330,17 +326,14 @@ class Lexer(QThread):
                 if self.file_con[self.current_row + 1] is not '\n':  # 超前检测
                     self.current_row += 1
                 else:
-                    self.current_row += 1
                     break
         elif ch == '=':  # /=
             word = self.file_con[self.current_row-1:self.current_row+1]
             self.token.append((self.current_line, word, self._code['/=']))
-            self.sign_table.add(word)
         else:  # / 除法
             self.current_row -= 1
             word = self.file_con[self.current_row]
             self.token.append((self.current_line, word, self._code['/']))
-            self.sign_table.add(word)
 
     def start_with_basic_arithmetic_operator(self):
         ch = self.file_con[self.current_row]
@@ -379,7 +372,6 @@ class Lexer(QThread):
             return
         word = self.file_con[index:self.current_row + 1]
         self.token.append((self.current_line, word, self._code[word]))
-        self.sign_table.add(word)
 
     def start_with_pre(self):
         # TODO: 预编译 替换字符串
@@ -393,14 +385,13 @@ class Lexer(QThread):
     def start_with_delimiter(self):
         word = self.file_con[self.current_row]
         self.token.append((self.current_line, word, self._code[word]))
-        self.sign_table.add(word)
 
     def scanner(self):
         self.current_row = 0
         while self.current_row < len(self.file_con):
             ch = self.file_con[self.current_row]
             if not (ch == ' ' or ch == '\t'):
-                if ch == '\n':
+                if ch == '\n' or ch == '\r\n':
                     self.current_line += 1
                 elif ch.isalpha() or ch == '_':  # 关键字 标识符
                     self.start_with_alpha()
