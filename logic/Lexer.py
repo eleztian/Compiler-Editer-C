@@ -28,101 +28,10 @@
 '''
 
 from PyQt5.QtCore import QThread, pyqtSignal
-
+from logic import complier_s
 
 class Lexer(QThread):
-    _code = {
-        'char': 1,
-        'double': 2,
-        'enum': 3,
-        'float': 4,
-        'int': 5,
-        'long': 6,
-        'short': 7,
-        'signed': 8,
-        'struct': 9,
-        'union': 10,
-        'unsigned': 11,
-        'void': 12,
-        'for': 13,
-        'do': 14,
-        'while': 15,
-        'continue': 16,
-        'if': 17,
-        'else': 18,
-        'goto': 19,
-        'switch': 20,
-        'case': 21,
-        'default': 22,
-        'return': 23,
-        'auto': 24,
-        'extern': 25,
-        'register': 26,
-        'static': 27,
-        'const': 28,
-        'sizeof': 29,
-        'typdef': 30,
-        'volatile': 31,
-        'break': 32,  # 关键字
-        '+': 33,
-        '-': 34,
-        '*': 35,
-        '/': 36,
-        '=': 37,
-        '|': 38,
-        '&': 39,
-        '!': 40,
-        '>': 41,
-        '<': 42,
-        '&&': 43,
-        '++': 44,
-        '--': 45,
-        '+=': 46,
-        '-=': 47,
-        '*=': 48,
-        '/=': 49,
-        '==': 50,
-        '|=': 51,
-        '&=': 52,
-        '!=': 53,
-        '>=': 54,
-        '<=': 55,
-        '>>=': 56,
-        '<<=': 57,
-        '||': 58,
-        '%': 59,  # 运算符
-        '>>': 60,
-        '<<': 61,
-        ',': 62,
-        '(': 63,
-        ')': 64,
-        '{': 65,
-        '}': 66,
-        '[': 67,
-        ']': 68,
-        ';': 69,
-        '//': 70,
-        '/*': 71,
-        '*/': 72,
-        ':': 73,
-        '.': 74,
-        '\\': 75,  # 界符
-        'constNum': 76,
-        'charRealNum': 77,
-        'string': 78,
-        'id': 79
-    }  # 内码表
-    _basic_arithmetic_operator = {
-        '+', '-', '*', '=', '|', '&', '>', '<', '!', '%'
-    }  # 符号表
-    _delimiters = {
-        ';', ',', ':', '(', ')', '{', '}', '[', ']', '<', '>', '.', '\\'
-    }  # 界符表
-    _error_info = [
-        "错误 %d: 第 %d 行缺少  %s  ;",
-        "错误 %d: 第 %d 行多余  %s  ;",
-        "错误 %d: 第 %d 行不能识别的字符  %s  ;"
-    ]  # 错误信息格式列表
+
     sinOut = pyqtSignal(list, list, set)
 
     def __init__(self, filename):
@@ -153,10 +62,10 @@ class Lexer(QThread):
             self.current_row += 1
         word = self.file_con[index: self.current_row]
         try:
-            t = self._code[word]   # 关键字
-            self.sign_table.add(word)
+            t = complier_s.code[word]   # 关键字
         except:
-            t = self._code['id']
+            t = complier_s.code['id']
+            self.sign_table.add(word)
         self.token.append((self.current_line, word, t))
 
         self.current_row -= 1
@@ -176,13 +85,17 @@ class Lexer(QThread):
             if _state == 1:
                 while _state == 1:
                     c = get_next_char()
-                    if c.isdigit():
-                        pass
-                    elif c == '.':
-                        _state = 2
-                    elif c == 'e' or c == 'E':
-                        _state = 4
+                    if c:
+                        if c.isdigit():
+                            pass
+                        elif c == '.':
+                            _state = 2
+                        elif c == 'e' or c == 'E':
+                            _state = 4
+                        else:
+                            _state = 7
                     else:
+                        self.current_row += 1
                         _state = 7
             if _state == 2:
                 while _state == 2:
@@ -265,7 +178,7 @@ class Lexer(QThread):
             state = 1
         isnum(state)
         word = self.file_con[index:self.current_row]
-        self.token.append((self.current_line, word, self._code['constNum']))
+        self.token.append((self.current_line, word, complier_s.code['constNum']))
         self.sign_table.add(word)
         self.current_row -= 1
 
@@ -274,7 +187,7 @@ class Lexer(QThread):
             word = self.file_con[self.current_row+1]  # 超前检测
             if word is not '\n' and self.current_row < self.file_con_len - 2:
                 if self.file_con[self.current_row+2] == '\'':  # 超前 2位 检测
-                    self.token.append((self.current_line, word, self._code['charRealNum']))
+                    self.token.append((self.current_line, word, complier_s.code['charRealNum']))
                     self.sign_table.add(word)
                     self.current_row += 2
                 else:
@@ -295,7 +208,7 @@ class Lexer(QThread):
         while self.current_row < self.file_con_len:
             if self.file_con[self.current_row] is '\"':
                 word = self.file_con[index:self.current_row]
-                self.token.append((self.current_line, word, self._code['string']))
+                self.token.append((self.current_line, word, complier_s.code['string']))
                 self.sign_table.add(word)
                 break
             elif self.file_con[self.current_row] is '\n':
@@ -329,11 +242,11 @@ class Lexer(QThread):
                     break
         elif ch == '=':  # /=
             word = self.file_con[self.current_row-1:self.current_row+1]
-            self.token.append((self.current_line, word, self._code['/=']))
+            self.token.append((self.current_line, word, complier_s.code['/=']))
         else:  # / 除法
             self.current_row -= 1
             word = self.file_con[self.current_row]
-            self.token.append((self.current_line, word, self._code['/']))
+            self.token.append((self.current_line, word, complier_s.code['/']))
 
     def start_with_basic_arithmetic_operator(self):
         ch = self.file_con[self.current_row]
@@ -371,7 +284,7 @@ class Lexer(QThread):
         else:
             return
         word = self.file_con[index:self.current_row + 1]
-        self.token.append((self.current_line, word, self._code[word]))
+        self.token.append((self.current_line, word, complier_s.code[word]))
 
     def start_with_pre(self):
         # TODO: 预编译 替换字符串
@@ -384,7 +297,7 @@ class Lexer(QThread):
 
     def start_with_delimiter(self):
         word = self.file_con[self.current_row]
-        self.token.append((self.current_line, word, self._code[word]))
+        self.token.append((self.current_line, word, complier_s.code[word]))
 
     def scanner(self):
         self.current_row = 0
@@ -405,9 +318,9 @@ class Lexer(QThread):
                     self.start_with_sign_char()
                 elif ch == '\"':  # 字符串
                     self.start_with_sign_string()
-                elif ch in self._basic_arithmetic_operator:  # 算数运算符
+                elif ch in complier_s.basic_arithmetic_operator:  # 算数运算符
                     self.start_with_basic_arithmetic_operator()
-                elif ch in self._delimiters:
+                elif ch in complier_s.delimiters:
                     self.start_with_delimiter()
                 else:
                     self.error.append((2, self.current_line, ch))

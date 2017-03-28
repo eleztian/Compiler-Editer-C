@@ -1,21 +1,24 @@
 import sys
 
-from PyQt5.QtCore import (QFile, QFileInfo, QSettings, QTimer, Qt, QByteArray,QThread,QThreadPool)
+from PyQt5.QtCore import (QFile, QFileInfo, QSettings, QTimer, Qt, QByteArray,QThread)
 from PyQt5.QtGui import QIcon, QKeySequence, QTextDocumentWriter,QTextCursor,QTextBlock
 from PyQt5.QtWidgets import (QAction, QApplication, QFileDialog, QGridLayout,
                              QMainWindow, QMessageBox, QTextEdit, QTabWidget,
-                             QWidget, QDockWidget, QTabBar,QPlainTextEdit,QLabel,QListWidget)
-import threading
+                             QWidget, QDockWidget, QTabBar,QListWidget)
 from logic.Lexer import Lexer
+from logic.Syner_v2 import Syner
 from ui_pyqt5.bterEdit import BterEdit
+from ui_pyqt5 import  textedit_rc
+from logic.complier_s import error_info, error_type
 
 __version__ = "1.0.0"
-
 rsrcfilename = ":/images/win"
+
 
 class MainWindow(QMainWindow):
     filename = ""
     docwidget = {}
+
     def __init__(self, parent=None):
         super(MainWindow, self).__init__(parent)
         self.setWindowIcon(QIcon(':/images/logo.png'))
@@ -53,6 +56,7 @@ class MainWindow(QMainWindow):
         ret = msgBox.exec()
         if ret == QMessageBox.Save:
             self.fileSave()
+            self.tab.removeTab(index)
         elif ret == QMessageBox.Discard:
             self.tab.removeTab(index)
             self.layout.addWidget(self.tab)
@@ -173,18 +177,34 @@ class MainWindow(QMainWindow):
 
     def show_toker_error_sign(self, token, error, sign):
         dock_name = QFileInfo(self.filename).fileName()
-        print(dock_name)
+        flag = 1
         try:
             self.docwidget[dock_name]["token"].addItem("LineNo\tWord\tCode")
             for i in token:
                 self.docwidget[dock_name]["token"].addItem(str(i[0]) + '\t' + i[1] + '\t' + str(i[2]))
             for i in error:
-                self.docwidget[dock_name]["error"].addItem(self.lexer._error_info[i[0]] % i)
+                flag = 0
+                self.docwidget[dock_name]["error"].addItem(error_info[error_type[i[0]]] % i)
             self.docwidget[dock_name]["sign"].addItem("Entry\tWord\tLength")
             for index, i in enumerate(sign):
                 self.docwidget[dock_name]["sign"].addItem(str(index) + '\t' + i + '\t' + str(len(i)))
         except Exception as e:
             print(e)
+        if flag:
+            try:
+                self.syner = Syner(token, sign)
+                self.syner.SynerOut.connect(self.showSyner_info)
+                self.syner.start()
+            except Exception as e:
+                print(e)
+
+    def showSyner_info(self, log, error):
+        dock_name = QFileInfo(self.filename).fileName()
+        print('syner finished')
+        for i in error:
+            self.docwidget[dock_name]["error"].addItem(i)
+        for i in log:
+            self.docwidget[dock_name]["log"].addItem(i)
 
     def token_list_double_clicked_fun(self, item):
         line_no = int(str(item.text()).split('\t')[0])
@@ -201,7 +221,7 @@ class MainWindow(QMainWindow):
             print(e)
 
     def error_list_double_clicked_fun(self, item):
-        # print(str(item.text()).split(" "))
+        print(str(item.text()).split(" "))
         line_no = int(str(item.text()).split(' ')[3])
         try:
             edit = self.tab.currentWidget().e_edit
@@ -220,9 +240,8 @@ class MainWindow(QMainWindow):
         token = QListWidget()
         error = QListWidget()
         sign = QListWidget()
-
-
-        self.docwidget[dock_name] = {"token": token, "error": error, "sign": sign}
+        log = QListWidget()
+        self.docwidget[dock_name] = {"token": token, "error": error, "sign": sign, "log": log}
         token.itemDoubleClicked.connect(self.token_list_double_clicked_fun)
         error.itemDoubleClicked.connect(self.error_list_double_clicked_fun)
         try:
@@ -230,12 +249,11 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(e)
         self.lexer = Lexer(self.filename)
-        # print(self.filename)
-        self.lexer.sinOut.connect(self.show_toker_error_sign)
         try:
+            self.lexer.sinOut.connect(self.show_toker_error_sign)
             self.lexer.start()
         except Exception as e:
-            print(e)
+            print("Start Lexer Error:", e)
         dock_token = QDockWidget(dock_name+"_Token")  # 实例化dockwidget类
         dock_token.setWidget(self.docwidget[dock_name]["token"])  # 带入的参数为一个QWidget窗体实例，将该窗体放入dock中
         dock_token.setObjectName(dock_name)
@@ -253,8 +271,16 @@ class MainWindow(QMainWindow):
         dock_sign.setObjectName(dock_name)
         dock_sign.setFeatures(dock_sign.AllDockWidgetFeatures)
         self.addDockWidget(Qt.RightDockWidgetArea, dock_sign)
+
+        dock_log = QDockWidget(dock_name + "_log")
+        dock_log.setWidget(self.docwidget[dock_name]["log"])
+        dock_log.setObjectName(dock_name)
+        dock_log.setFeatures(dock_log.AllDockWidgetFeatures)
+        self.addDockWidget(Qt.RightDockWidgetArea, dock_log)
+
         self.tabifyDockWidget(dock_token, dock_error)
         self.tabifyDockWidget(dock_error, dock_sign)
+        self.tabifyDockWidget(dock_sign, dock_log)
 
     def closeEvent(self, event):
         failures = []
@@ -331,11 +357,11 @@ class MainWindow(QMainWindow):
 
     def fileOpen(self):
         filename, _ = QFileDialog.getOpenFileName(self, "Open File", '',
+                                                       "All Files (*);;"
                                                        "C++ Files (*.cpp *.h *.py);;"
                                                        "Txt files (*.txt);;"
                                                        "Python files (*.py);;"
-                                                       "HTML-Files (*.htm *.html);;"
-                                                       "All Files (*)")
+                                                       "HTML-Files (*.htm *.html)")
         if filename:
             t = BterEdit()
             t.filename = filename
@@ -362,13 +388,16 @@ class MainWindow(QMainWindow):
             return True
 
     def fileSave(self):
+        print(self.filename)
         if not self.filename:
             return self.fileSaveAs()
         else:
             writer = QTextDocumentWriter(self.filename)
             success = writer.write(self.tab.currentWidget().e_edit.document())
+            print(success)
             if success:
                 self.tab.currentWidget().e_edit.document().setModified(False)
+                print("save")
                 return True
         return False
 
