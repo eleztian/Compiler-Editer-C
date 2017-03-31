@@ -313,7 +313,6 @@ class Syner(QThread):
             self.statement_for_s()
             self.statement_while()
 
-
     # 以分号结尾的语句
     @show_log_info("about statement about start with id ")
     def statement_end_with_div(self):
@@ -370,8 +369,6 @@ class Syner(QThread):
         if self._match_next('('):
             have_k = True
         self._match_next('!')
-        ind_old = self.index
-
         self.exp_s()
         w = self._token_next()
         if w in logic_sign:
