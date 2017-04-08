@@ -13,8 +13,9 @@ def show_log_info(info=""):
             args[0].tab += 2
             s = "{:->" + str(args[0].tab) + "s} match "
             s = s.format(' ') + info
-            args[0].log_info.append(s)
             result = func(*args, **kw)
+            if result:
+                args[0].log_info.append(s)
             args[0].tab -= 2
             return result
         return _func
@@ -33,15 +34,13 @@ class Syner(QThread):
         self.sign_table = sign_table
         self.log_info = []
         self.tab = 0
-        self.exit_syner = False
 
     # 获取下一个token值
     def _token_next(self, back_num=1):
         line, word, co = None, None, None
-        if self.index < self.token.__len__():
+        try:
             line, word, co = self.token[self.index]
-
-        else:
+        except Exception:
             word = None
         self.index += 1
         if back_num == 1:
@@ -68,7 +67,7 @@ class Syner(QThread):
                     result = True
         else:
             w = 'null'
-            l = token[self.token.__len__()-1][0]
+            l = self.token[self.token_len-1][0]
         if not result:
             if do_error:
                 self._error("match error on %s not %s" % (w, match_c))
@@ -79,15 +78,18 @@ class Syner(QThread):
 
     # 出错处理
     def _error(self, error_type=""):
-        s = "Syner Error in %d Line (%s) after token %s" % (self.token[self.index-2][0], error_type, self.token[self.index - 2][1])
-        self.error.append(s)
-        print("error in ", self.token[self.index - 2], error_type)
         try:
-            pass
-            # self.SynerOut.emit(self.log_info, self.error)
-            # self.deleteLater()
+            s = "Syner Error in %d Line (%s) after token %s" % (self.token[self.index-2][0], error_type, self.token[self.index - 2][1])
+            self.error.append(s)
+            print("error in ", self.token[self.index - 2], error_type)
         except Exception as e:
             print(e)
+        # try:
+        #     pass
+        #     # self.SynerOut.emit(self.log_info, self.error)
+        #     # self.deleteLater()
+        # except Exception as e:
+        #     print(e)
 
     # 修饰词
     @show_log_info("about modifier")
@@ -261,9 +263,9 @@ class Syner(QThread):
                 self._match_next(')', True)
                 if self._match_next('{'):   # 函数定义
                     self.fun_block()
-                    self._match_next('}', True)
+                    self._match_next('}', do_error=True)
                 else:
-                    self._match_next(';', True)  # 函数声明
+                    self._match_next(';', True)  # 函数声
 
     @show_log_info("about function use par list")
     def fun_use_par_list(self):
@@ -304,8 +306,9 @@ class Syner(QThread):
     # 语句
     @show_log_info("about statements ")
     def statement_s(self):
-        while self.index < self.token_len - 1:
-            if self._match_next('}'):
+        while self.index < self.token_len:
+            t = self._match_next('}')
+            if t:
                 self._token_redo()
                 break
             self.statement_end_with_div()
@@ -383,10 +386,7 @@ class Syner(QThread):
     @show_log_info("about function exp bool eclo")
     def exp_bool_many(self):
         if self._match_next('&&') or self._match_next('||'):
-            ind_old = self.index
             self.exp_bool()
-            if ind_old != self.index:
-                self._match_next('more || or &&')
 
     # for 语句 for(<赋值语句><,赋值语句闭包>;<bool_exp>;<后缀表达式>){statement}
     @show_log_info("about statements")
@@ -417,12 +417,9 @@ class Syner(QThread):
             if self._match_next('++') or self._match_next('--'):
                 pass
             elif self._match_next('+=') or self._match_next('-=') or\
-                  self._match_next('*=') or self._match_next('/=')or\
-                  self._match_next('>>=') or self._match_next('<<='):
-                ind_old = self.index
+                    self._match_next('*=') or self._match_next('/=') or\
+                    self._match_next('>>=') or self._match_next('<<='):
                 self.exp_s()
-                if ind_old == self.index:
-                    self._error('later_exp error')
             else:
                 self._error('more id')
 
@@ -464,19 +461,21 @@ class Syner(QThread):
                     self.declare_2_s()
 
     def run(self):
-        self.syner_start()
         try:
+            self.syner_start()
             # if self.error.__len__() == 0:
-                self.SynerOut.emit(self.log_info, self.error)
+            self.SynerOut.emit(self.log_info, self.error)
         except Exception as e:
-            print(e)
+            self.SynerOut.emit(self.log_info, self.error)
+            print("run", e)
 
 if __name__ == '__main__':
-    lexer = Lexer("testfile.c")
+    pass
+    lexer = Lexer("testfile.txt")
     lexer.run()
     token = lexer.token
     print(token)
     syner = Syner(lexer.token, lexer.sign_table)
-    syner.syner_start()
+    syner.run()
     for i in syner.log_info:
         print(i)
