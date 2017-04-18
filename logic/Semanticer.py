@@ -1,3 +1,4 @@
+
 """
     语法分析(递归下降) LL(1)
 """
@@ -22,11 +23,11 @@ def show_log_info(info=""):
     return _deco
 
 
-class Syner(QThread):
+class Semantic(QThread):
     SynerOut = pyqtSignal(list, list)
 
     def __init__(self, t, sign_table):
-        super(Syner, self).__init__()
+        super(Semantic, self).__init__()
         self.token = t
         self.index = 0
         self.error = []
@@ -57,7 +58,6 @@ class Syner(QThread):
     def _match_next(self, match_c, do_error=False, juge_other=False, log=True):
         result = False
         l, w, c = self._token_next(3)
-        s = "{:->" + str(self.tab+2) +"s} match  {:s}\t(Line: {:d})"
         if w is not None:
             if juge_other:
                 if c == code[match_c]:
@@ -72,8 +72,6 @@ class Syner(QThread):
             if do_error:
                 self._error("match error on %s not %s" % (w, match_c))
             self._token_redo()
-        if log:
-            self.log_info.append(s.format("", str(match_c), l))
         return result
 
     # 出错处理
@@ -92,7 +90,6 @@ class Syner(QThread):
         #     print(e)
 
     # 修饰词
-    @show_log_info("about modifier")
     def modifier_s(self):
         c = self._token_next()
         if c not in modifier:
@@ -101,7 +98,6 @@ class Syner(QThread):
         return True
 
     # 数据类型
-    @show_log_info("about type")
     def type_s(self, do_error=False):
         c = self._token_next()
         if c not in s_type:
@@ -112,26 +108,22 @@ class Syner(QThread):
         return True
 
     # 表达式  <表达式> -> <因子> <项>
-    @show_log_info("about exp")
     def exp_s(self):
         self.yinzi_s()
         self.xiang_s()
 
     # <因子> -> <因式> <因式递归>
-    @show_log_info("about exp_yinzi")
     def yinzi_s(self):
         self.yinshi_s()
         self.yinshi_closure()
 
     # < 项 > -> + < 因子 > < 项 > | - < 因子 > < 项 > | $
-    @show_log_info("about exp_xiang")
     def xiang_s(self):
         if self._match_next('+') or self._match_next('-'):
             self.yinzi_s()
             self.xiang_s()
 
     # < 因式 > -> ( < 表达式 > ) | < id > | < 数字 >| <fun_use>
-    @show_log_info("about exp_yinshi")
     def yinshi_s(self):
         _, w, c = self._token_next(3)
         if c == code['id']:
@@ -155,7 +147,6 @@ class Syner(QThread):
             self.yinshi_closure()
 
     # < 右值 > -> < 表达式 > | { < 多个数据 >}
-    @show_log_info("about right values")
     def right_value_s(self):
         if self._match_next('{'):
             self.many_value_s()
@@ -164,7 +155,6 @@ class Syner(QThread):
             self.exp_s()
 
     # <多个数据> -> <数字> <数字闭包>
-    @show_log_info("about right many values")
     def many_value_s(self):
         w = self._token_next()
         if w.isdigit():
@@ -180,13 +170,11 @@ class Syner(QThread):
                 self._error('no number')
 
     # <赋初值> -> = <右值> | $
-    @show_log_info("about init value")
     def init_value_s(self):
         if self._match_next('='):
             self.right_value_s()
 
     # < 声明 > -> < 修饰词 > < 类型 > < id > < 赋初值 >
-    @show_log_info("about declare")
     def declare_s(self):
         if self.type_s(self.modifier_s()):
             self.exp_whole_s()
@@ -195,7 +183,6 @@ class Syner(QThread):
         return False
 
     # {*}a[id|num]=3*(2+2)
-    @show_log_info("about statement init value")
     def exp_whole_s(self):
         self.addr_closure()
         self._match_next('id', True, True)
@@ -218,7 +205,6 @@ class Syner(QThread):
             self.many_declare_s()
 
     # 匹配若干 {*}
-    @show_log_info("about addr *")
     def addr_closure(self):
         w = self._token_next()
         if w == '*':
@@ -240,7 +226,6 @@ class Syner(QThread):
         return False
 
     # < 声明语句 > -> < 声明 >;
-    @show_log_info("about statement declare")
     def declare_2_s(self):
         if self.declare_s():
             self._match_next(';', True)
@@ -253,7 +238,6 @@ class Syner(QThread):
             self.declare_2_closure()
 
     # 函数定义， 函数声明
-    @show_log_info("about functions")
     def fun_s(self):
         if self.type_s(self.modifier_s()):
             self._match_next('id', do_error=True, juge_other=True)
@@ -266,7 +250,6 @@ class Syner(QThread):
                 else:
                     self._match_next(';', True)  # 函数声
 
-    @show_log_info("about function use par list")
     def fun_use_par_list(self):
         w = self._token_next()
         if w in self.sign_table:
@@ -278,7 +261,6 @@ class Syner(QThread):
             return False
 
     # 函数声明参数列表 par {<desc><type><*><id><[num]><value init><，闭包>}
-    @show_log_info("about function desc par list")
     def fun_desc_par_list(self):
         result = False
         if self.type_s(self.modifier_s()):
@@ -297,13 +279,11 @@ class Syner(QThread):
             self.fun_desc_par_list_e()
 
     # 函数快 :: <数据定义>  <其他语句> <return>
-    @show_log_info("about function block")
     def fun_block(self):
         self.declare_2_closure()
         self.statement_s()
 
     # 语句
-    @show_log_info("about statements ")
     def statement_s(self):
         while self.index < self.token_len:
             t = self._match_next('}')
@@ -316,7 +296,6 @@ class Syner(QThread):
             self.statement_while()
 
     # 以分号结尾的语句
-    @show_log_info("about statement about start with id ")
     def statement_end_with_div(self):
         ind_old = self.index
         if self._match_next('id', juge_other=True):
@@ -332,7 +311,6 @@ class Syner(QThread):
                 self.exp_s()
             self._match_next(';')
 
-    @show_log_info("about function use")
     def fun_use_s(self):
         self._match_next('id', True, True)
         self._match_next('(', True)
@@ -341,7 +319,6 @@ class Syner(QThread):
         self._match_next(';', True)
 
     # 赋值语句 <*><id><[]><value_init>;
-    @show_log_info("about init values ")
     def statement_init_value_s(self):
         if self._match_next('id', do_error=self.addr_closure(), juge_other=True):
             self.group_define_op_s()
@@ -349,7 +326,6 @@ class Syner(QThread):
             self._match_next(';', True)
 
     # if语句 if(bool_exp){statement}<else{statement}>
-    @show_log_info("about statement if ")
     def statement_if_s(self):
         if self._match_next('if'):
             self._match_next('(', True)
@@ -364,7 +340,6 @@ class Syner(QThread):
                 self._match_next('}', True)
 
     # bool 表达式 :: <exp> <>|<|==|!=> <exp>
-    @show_log_info("about exp bool ")
     def exp_bool(self):
         have_k = False
         self._match_next('!')
@@ -382,13 +357,11 @@ class Syner(QThread):
         self.exp_bool_many()
 
     # 多个bool表达式 && <bool_exp> or || <bool_exp>
-    @show_log_info("about function exp bool eclo")
     def exp_bool_many(self):
         if self._match_next('&&') or self._match_next('||'):
             self.exp_bool()
 
     # for 语句 for(<赋值语句><,赋值语句闭包>;<bool_exp>;<后缀表达式>){statement}
-    @show_log_info("about statements")
     def statement_for_s(self):
         if self._match_next('for'):
             self._match_next('(', True)
@@ -403,14 +376,12 @@ class Syner(QThread):
             self._match_next('}', True)
 
     # a = 1, b = 2...
-    @show_log_info("about statements for par1")
     def for_init_exp(self):
         if self._match_next('id', juge_other=True):
             self.init_value_s()
             self.many_value_closure()
 
     # 后缀表达式 a++ a-- a += exp a -= exp ...
-    @show_log_info("about statements for par3")
     def later_exp(self):
         if self._match_next('id', juge_other=True):
             if self._match_next('++') or self._match_next('--'):
@@ -423,7 +394,6 @@ class Syner(QThread):
                 self._error('more id')
 
     # while 语句 while(bool_exp){statement} or while(bool_exp);
-    @show_log_info("about statements while")
     def statement_while(self):
         if self._match_next('while'):
             self._match_next('(', True)
@@ -435,7 +405,6 @@ class Syner(QThread):
             else:
                 self._match_next(';', True)
 
-    @show_log_info("about statement return")
     def statement_return(self):
         if self._match_next('return'):
             self.exp_s()
@@ -474,7 +443,7 @@ if __name__ == '__main__':
     lexer.run()
     token = lexer.token
     print(token)
-    syner = Syner(lexer.token, lexer.sign_table)
+    syner = Semantic(lexer.token, lexer.sign_table)
     syner.run()
     for i in syner.log_info:
         print(i)

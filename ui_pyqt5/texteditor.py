@@ -4,13 +4,14 @@ from PyQt5.QtCore import (QFile, QFileInfo, QSettings, QTimer, Qt, QByteArray,QT
 from PyQt5.QtGui import QIcon, QKeySequence, QTextDocumentWriter,QTextCursor,QTextBlock
 from PyQt5.QtWidgets import (QAction, QApplication, QFileDialog, QGridLayout,
                              QMainWindow, QMessageBox, QTextEdit, QTabWidget,
-                             QWidget, QDockWidget, QTabBar,QListWidget)
+                             QWidget, QDockWidget, QTabBar, QListWidget, QFrame,
+                             QPushButton, QTableWidget, QLineEdit, QTableWidgetItem, QAbstractItemView)
 from logic.Lexer import Lexer
 from logic.Syner_v2 import Syner
 from ui_pyqt5.bterEdit import BterEdit
 from ui_pyqt5 import  textedit_rc
 from logic.complier_s import error_info, error_type
-
+from logic.Forecast_analysis import Forecasting
 __version__ = "1.0.0"
 rsrcfilename = ":/images/win"
 
@@ -18,6 +19,7 @@ rsrcfilename = ":/images/win"
 class MainWindow(QMainWindow):
     filename = ""
     docwidget = {}
+    step_no = 0
 
     def __init__(self, parent=None):
         super(MainWindow, self).__init__(parent)
@@ -113,8 +115,7 @@ class MainWindow(QMainWindow):
                                            QKeySequence.Undo, rsrcfilename + '/editundo.png',
                                            "Undo")
         LexicalAnalysisAction = self.createAction("&Start", self.start_lexer)
-        SyntaxAnalysisAction = self.createAction("&Start", self.CreateDockWidget)
-
+        predictiveAnalysisAction = self.createAction("&Predictive Analysis", self.predictive_analysis)
         fileMenu = self.menuBar().addMenu("&File")
         self.addActions(fileMenu, (fileNewAction, fileOpenAction,
                                    fileSaveAction, fileSaveAsAction,
@@ -125,7 +126,7 @@ class MainWindow(QMainWindow):
         lexicalAnalysisMenu = self.menuBar().addMenu("&LexicalAnalysis")
         self.addActions(lexicalAnalysisMenu, (LexicalAnalysisAction,))
         syntaxAnalysisMenu = self.menuBar().addMenu("&SyntaxAnalysis")
-        self.addActions(syntaxAnalysisMenu, (SyntaxAnalysisAction,))
+        self.addActions(syntaxAnalysisMenu, (predictiveAnalysisAction,))
         middleCodeMenu = self.menuBar().addMenu("&MiddleCode")
         targetCodeMenu = self.menuBar().addMenu("&TargetCode")
         helpMenu = self.menuBar().addMenu("&Help")
@@ -175,7 +176,188 @@ class MainWindow(QMainWindow):
         self.addDockWidget(Qt.RightDockWidgetArea,
                            dock)  # 设置dockwidget放置在QMainWindow中的位置，并且将dockwidget添加至QMainWindow中
 
+    def predictive_analysis(self):
+        self.pre_frame = QFrame()
+
+        self.pre_op_widget = QWidget(self.pre_frame)
+        self.open_file_btn = QPushButton(self.pre_op_widget, text="Open")
+        self.ok_grammar_btn = QPushButton(self.pre_op_widget, text="OK")
+        self.follow_btn = QPushButton(self.pre_op_widget, text="Fillow")
+        self.first_btn = QPushButton(self.pre_op_widget, text="First")
+        self.create_pre_table = QPushButton(self.pre_op_widget, text="Create Tabel")
+        gird_op = QGridLayout()
+        gird_op.addWidget(self.open_file_btn, 0, 0)
+        gird_op.addWidget(self.ok_grammar_btn, 0, 1)
+        gird_op.addWidget(self.first_btn, 0, 2)
+        gird_op.addWidget(self.follow_btn, 0, 3)
+        gird_op.addWidget(self.create_pre_table, 0, 4)
+        self.pre_op_widget.setLayout(gird_op)
+
+        self.pre_widget_left = QWidget(self.pre_frame)
+
+        gird_w = QGridLayout()
+        self.pre_edit = QTextEdit(self.pre_widget_left)
+        self.pre_first_table = QTableWidget(5, 10)
+        self.pre_first_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.pre_first_table.setHorizontalHeaderLabels(['First'])
+        self.pre_follow_table = QTableWidget(5, 10)
+        self.pre_follow_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.pre_follow_table.setHorizontalHeaderLabels(['Fallow'])
+        gird_w.addWidget(self.pre_edit, 0, 0, 1, 2)
+        gird_w.addWidget(self.pre_first_table, 1, 0, 1, 2)
+        gird_w.addWidget(self.pre_follow_table, 2, 0, 1, 2)
+        self.pre_widget_left.setLayout(gird_w)
+
+        self.pre_widget_right = QWidget(self.pre_frame)
+        self.pre_pre_table = QTableWidget(5, 10)
+        self.pre_pre_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.pre_pre_table.setHorizontalHeaderLabels(['预测表'])
+        self.pre_list = QTableWidget()
+        self.pre_list = QTableWidget(30, 4)
+        self.pre_list.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.pre_list.verticalHeader().setVisible(False)
+        self.pre_list.setHorizontalHeaderLabels(['步骤', '符号栈', '输入串', '所用产生式'])
+        self.pre_line_dit = QLineEdit("Input statement")
+        self.start_btn = QPushButton("Start")
+        self.start_step_btn = QPushButton("Next Step")
+        self.clear_all_btn = QPushButton("Clear")
+        gird_w_r = QGridLayout()
+        gird_w_r.addWidget(self.pre_pre_table, 0, 0, 1, 4)
+        gird_w_r.addWidget(self.pre_line_dit, 1, 0, 1, 1)
+        gird_w_r.addWidget(self.start_btn, 1, 1, 1, 1)
+        gird_w_r.addWidget(self.start_step_btn, 1, 2, 1, 1)
+        gird_w_r.addWidget(self.clear_all_btn, 1, 3, 1, 1)
+        gird_w_r.addWidget(self.pre_list, 2, 0, 1, 4)
+        self.pre_widget_right.setLayout(gird_w_r)
+
+        gird_f = QGridLayout()
+        gird_f.addWidget(self.pre_op_widget, 0, 0, 1, 2)
+        gird_f.addWidget(self.pre_widget_left, 1, 0)
+        gird_f.addWidget(self.pre_widget_right, 1, 1)
+        gird_f.setColumnStretch(0, 1)
+        gird_f.setColumnStretch(1, 1)
+        self.pre_frame.setLayout(gird_f)
+        self.pre_frame.show()
+        self.predictive_analysis_acdtion()
+
+    def predictive_analysis_acdtion(self):
+        self.open_file_btn.clicked.connect(self.pre_open_file)
+        self.ok_grammar_btn.clicked.connect(self.pre_ok_grammar)
+        self.first_btn.clicked.connect(self.pre_first_start)
+        self.follow_btn.clicked.connect(self.pre_follow_start)
+        self.create_pre_table.clicked.connect(self.pre_create_table)
+        self.start_step_btn.clicked.connect(self.pre_start_step)
+        self.start_btn.clicked.connect(self.pre_start_all)
+        self.clear_all_btn.clicked.connect(self.pre_clear_all)
+
+    def pre_clear_all(self):
+        self.pre_list.clear()
+        self.pre_forecasting.analysis_init()
+        self.result = True
+
+    def pre_start_step(self):
+        try:
+            if self.pre_forecasting.analysis_text == '':
+                s = self.pre_line_dit.text()
+                self.pre_forecasting.set_analysis_text(s)
+                self.step_no = 0
+                self.result = True
+            if self.result:
+                info_str, self.result = self.pre_forecasting.analysis()
+                if info_str:
+                    self.pre_list.setItem(self.step_no, 0, QTableWidgetItem(str(self.step_no + 1)))
+                    self.pre_list.setItem(self.step_no, 1, QTableWidgetItem(str(self.pre_forecasting.sign_stack)))
+                    self.pre_list.setItem(self.step_no, 2, QTableWidgetItem(self.pre_forecasting.analysis_text[
+                                                                             self.pre_forecasting.exp_index::]))
+                    self.pre_list.setItem(self.step_no, 3, QTableWidgetItem(info_str))
+                    self.step_no += 1
+            return self.result
+        except Exception as e:
+            print(e)
+        return False
+
+    def pre_start_all(self):
+        while self.pre_start_step():
+            pass
+
+
+    def pre_create_table(self):
+        try:
+            self.pre_forecasting.create_forecasting_table()
+            ter_list = self.pre_forecasting.terminal_symbol + ['#']
+            self.pre_pre_table.setHorizontalHeaderLabels(ter_list)
+            self.pre_pre_table.setVerticalHeaderLabels(self.pre_forecasting.non_terminal_symbol)
+            for y, non in enumerate(self.pre_forecasting.non_terminal_symbol):
+                for x, ter in enumerate(ter_list):
+                    try:
+                        gar = self.pre_forecasting.forecast_table[non][ter]
+                        self.pre_pre_table.setItem(y, x, QTableWidgetItem(non + '->' + gar))
+                    except:
+                        pass
+        except Exception as e:
+            print(e)
+
+    def pre_first_start(self):
+        try:
+            self.pre_forecasting.get_first_set()
+            ter_list = self.pre_forecasting.terminal_symbol + ['$']
+            self.pre_first_table.setHorizontalHeaderLabels(ter_list)
+            self.pre_first_table.setVerticalHeaderLabels(self.pre_forecasting.non_terminal_symbol)
+            for y, non in enumerate(self.pre_forecasting.non_terminal_symbol):
+                for x, ter in enumerate(ter_list):
+                    t = self.pre_forecasting.first_set[non]
+                    if ter in t:
+                        self.pre_first_table.setItem(y, x, QTableWidgetItem('1'))
+        except Exception as e:
+            print(e)
+
+    def pre_follow_start(self):
+        try:
+            self.pre_forecasting.get_follow_set()
+            ter_list = self.pre_forecasting.terminal_symbol + ['#']
+            self.pre_follow_table.setHorizontalHeaderLabels(ter_list)
+            self.pre_follow_table.setVerticalHeaderLabels(self.pre_forecasting.non_terminal_symbol)
+            for y, non in enumerate(self.pre_forecasting.non_terminal_symbol):
+                for x, ter in enumerate(ter_list):
+                    t = self.pre_forecasting.follow_set[non]
+                    if ter in t:
+                        self.pre_follow_table.setItem(y, x, QTableWidgetItem('1'))
+        except Exception as e:
+            print(e)
+
+    def pre_open_file(self):
+        filename, _ = QFileDialog.getOpenFileName(self.pre_frame, "Open File", '',
+                                                  "All Files (*);;"
+                                                  "C++ Files (*.cpp *.h *.py);;"
+                                                  "Txt files (*.txt);;"
+                                                  "Python files (*.py);;"
+                                                  "HTML-Files (*.htm *.html)")
+        print(filename)
+        if filename:
+            try:
+                inFile = QFile(filename)
+                if inFile.open(QFile.ReadOnly | QFile.Text):
+                    print('read start')
+                    text = inFile.readAll()
+                    text = str(text, encoding='utf-8')
+                    print(text)
+                    self.pre_edit.setPlainText(text)
+                    inFile.close()
+                    return True
+            except Exception as e:
+                QMessageBox.warning(self, "Text Editor -- Save Error",
+                                    "Failed to save {0}: {1}".format(self.filename, e))
+        return False
+
+    def pre_ok_grammar(self):
+        try:
+            self.pre_forecasting = Forecasting(text=self.pre_edit.toPlainText())
+
+        except Exception as e:
+            print(e)
+
     def show_toker_error_sign(self, token, error, sign):
+        print(token)
         dock_name = QFileInfo(self.filename).fileName()
         flag = 1
         try:
@@ -244,10 +426,6 @@ class MainWindow(QMainWindow):
         self.docwidget[dock_name] = {"token": token, "error": error, "sign": sign, "log": log}
         token.itemDoubleClicked.connect(self.token_list_double_clicked_fun)
         error.itemDoubleClicked.connect(self.error_list_double_clicked_fun)
-        try:
-            self.lexer.exit()
-        except Exception as e:
-            print(e)
         self.lexer = Lexer(self.filename)
         try:
             self.lexer.sinOut.connect(self.show_toker_error_sign)
@@ -394,7 +572,6 @@ class MainWindow(QMainWindow):
         else:
             writer = QTextDocumentWriter(self.filename)
             success = writer.write(self.tab.currentWidget().e_edit.document())
-            print(success)
             if success:
                 self.tab.currentWidget().e_edit.document().setModified(False)
                 print("save")

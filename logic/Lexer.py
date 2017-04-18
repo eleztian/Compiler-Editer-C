@@ -188,6 +188,7 @@ class Lexer(QThread):
             if word is not '\n' and self.current_row < self.file_con_len - 2:
                 if self.file_con[self.current_row+2] == '\'':  # 超前 2位 检测
                     self.token.append((self.current_line, word, complier_s.code['charRealNum']))
+                    word = '\'' + word + '\''
                     self.sign_table.add(word)
                     self.current_row += 2
                 else:
@@ -209,6 +210,7 @@ class Lexer(QThread):
             if self.file_con[self.current_row] is '\"':
                 word = self.file_con[index:self.current_row]
                 self.token.append((self.current_line, word, complier_s.code['string']))
+                word = '\"' + word + '\"'
                 self.sign_table.add(word)
                 break
             elif self.file_con[self.current_row] is '\n':
@@ -336,7 +338,8 @@ class Lexer(QThread):
         self.quit()
 
 if __name__ == '__main__':
-    lexer = Lexer("testfile.c")
+    print("sss")
+    lexer = Lexer("testfile.txt")
     lexer.scanner()
     print(lexer.sign_table)
     print(lexer.token)
