@@ -11,7 +11,8 @@ from logic.Syner_v2 import Syner
 from ui_pyqt5.bterEdit import BterEdit
 from ui_pyqt5 import  textedit_rc
 from logic.complier_s import error_info, error_type
-from logic.Forecast_analysis import Forecasting
+from logic.Forecast import Forecasting
+from logic.LR0 import LR0
 __version__ = "1.0.0"
 rsrcfilename = ":/images/win"
 
@@ -116,6 +117,8 @@ class MainWindow(QMainWindow):
                                            "Undo")
         LexicalAnalysisAction = self.createAction("&Start", self.start_lexer)
         predictiveAnalysisAction = self.createAction("&Predictive Analysis", self.predictive_analysis)
+        lrAnanlysisAction = self.createAction("&LR(0) Analysis", self.lr_stup)
+
         fileMenu = self.menuBar().addMenu("&File")
         self.addActions(fileMenu, (fileNewAction, fileOpenAction,
                                    fileSaveAction, fileSaveAsAction,
@@ -126,7 +129,7 @@ class MainWindow(QMainWindow):
         lexicalAnalysisMenu = self.menuBar().addMenu("&LexicalAnalysis")
         self.addActions(lexicalAnalysisMenu, (LexicalAnalysisAction,))
         syntaxAnalysisMenu = self.menuBar().addMenu("&SyntaxAnalysis")
-        self.addActions(syntaxAnalysisMenu, (predictiveAnalysisAction,))
+        self.addActions(syntaxAnalysisMenu, (predictiveAnalysisAction, lrAnanlysisAction))
         middleCodeMenu = self.menuBar().addMenu("&MiddleCode")
         targetCodeMenu = self.menuBar().addMenu("&TargetCode")
         helpMenu = self.menuBar().addMenu("&Help")
@@ -197,10 +200,11 @@ class MainWindow(QMainWindow):
 
         gird_w = QGridLayout()
         self.pre_edit = QTextEdit(self.pre_widget_left)
-        self.pre_first_table = QTableWidget(5, 10)
+        self.pre_first_table = QTableWidget()
+        self.pre_first_table.resizeColumnsToContents()
         self.pre_first_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.pre_first_table.setHorizontalHeaderLabels(['First'])
-        self.pre_follow_table = QTableWidget(5, 10)
+        self.pre_follow_table = QTableWidget()
         self.pre_follow_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.pre_follow_table.setHorizontalHeaderLabels(['Fallow'])
         gird_w.addWidget(self.pre_edit, 0, 0, 1, 2)
@@ -209,13 +213,13 @@ class MainWindow(QMainWindow):
         self.pre_widget_left.setLayout(gird_w)
 
         self.pre_widget_right = QWidget(self.pre_frame)
-        self.pre_pre_table = QTableWidget(5, 10)
+        self.pre_pre_table = QTableWidget()
         self.pre_pre_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.pre_pre_table.setHorizontalHeaderLabels(['预测表'])
         self.pre_list = QTableWidget()
-        self.pre_list = QTableWidget(30, 4)
         self.pre_list.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.pre_list.verticalHeader().setVisible(False)
+        self.pre_list.setColumnCount(4)
         self.pre_list.setHorizontalHeaderLabels(['步骤', '符号栈', '输入串', '所用产生式'])
         self.pre_line_dit = QLineEdit("Input statement")
         self.start_btn = QPushButton("Start")
@@ -265,6 +269,7 @@ class MainWindow(QMainWindow):
             if self.result:
                 info_str, self.result = self.pre_forecasting.analysis()
                 if info_str:
+                    self.pre_list.insertRow(self.step_no)
                     self.pre_list.setItem(self.step_no, 0, QTableWidgetItem(str(self.step_no + 1)))
                     self.pre_list.setItem(self.step_no, 1, QTableWidgetItem(str(self.pre_forecasting.sign_stack)))
                     self.pre_list.setItem(self.step_no, 2, QTableWidgetItem(self.pre_forecasting.analysis_text[
@@ -280,30 +285,37 @@ class MainWindow(QMainWindow):
         while self.pre_start_step():
             pass
 
-
     def pre_create_table(self):
         try:
             self.pre_forecasting.create_forecasting_table()
-            ter_list = self.pre_forecasting.terminal_symbol + ['#']
+            ter_list = self.pre_forecasting.grammar.terminal_symbol + ['#']
+            self.pre_pre_table.setColumnCount(len(ter_list))
             self.pre_pre_table.setHorizontalHeaderLabels(ter_list)
-            self.pre_pre_table.setVerticalHeaderLabels(self.pre_forecasting.non_terminal_symbol)
-            for y, non in enumerate(self.pre_forecasting.non_terminal_symbol):
+            self.pre_pre_table.setVerticalHeaderLabels(self.pre_forecasting.grammar.non_terminal_symbol)
+            for y, non in enumerate(self.pre_forecasting.grammar.non_terminal_symbol):
+                self.pre_pre_table.insertRow(y)
                 for x, ter in enumerate(ter_list):
                     try:
                         gar = self.pre_forecasting.forecast_table[non][ter]
                         self.pre_pre_table.setItem(y, x, QTableWidgetItem(non + '->' + gar))
                     except:
                         pass
+            self.pre_pre_table.resizeColumnsToContents()
+            self.pre_pre_table.resizeRowsToContents()
         except Exception as e:
             print(e)
 
     def pre_first_start(self):
         try:
             self.pre_forecasting.get_first_set()
-            ter_list = self.pre_forecasting.terminal_symbol + ['$']
+            ter_list = self.pre_forecasting.grammar.terminal_symbol + ['$']
+            self.pre_first_table.setColumnCount(len(ter_list))
             self.pre_first_table.setHorizontalHeaderLabels(ter_list)
-            self.pre_first_table.setVerticalHeaderLabels(self.pre_forecasting.non_terminal_symbol)
-            for y, non in enumerate(self.pre_forecasting.non_terminal_symbol):
+            self.pre_first_table.resizeColumnsToContents()
+            self.pre_first_table.resizeRowsToContents()
+            self.pre_first_table.setVerticalHeaderLabels(self.pre_forecasting.grammar.non_terminal_symbol)
+            for y, non in enumerate(self.pre_forecasting.grammar.non_terminal_symbol):
+                self.pre_first_table.insertRow(y)
                 for x, ter in enumerate(ter_list):
                     t = self.pre_forecasting.first_set[non]
                     if ter in t:
@@ -314,10 +326,14 @@ class MainWindow(QMainWindow):
     def pre_follow_start(self):
         try:
             self.pre_forecasting.get_follow_set()
-            ter_list = self.pre_forecasting.terminal_symbol + ['#']
+            ter_list = self.pre_forecasting.grammar.terminal_symbol + ['#']
+            self.pre_follow_table.setColumnCount(len(ter_list))
             self.pre_follow_table.setHorizontalHeaderLabels(ter_list)
-            self.pre_follow_table.setVerticalHeaderLabels(self.pre_forecasting.non_terminal_symbol)
-            for y, non in enumerate(self.pre_forecasting.non_terminal_symbol):
+            self.pre_follow_table.resizeColumnsToContents()
+            self.pre_follow_table.resizeRowsToContents()
+            self.pre_follow_table.setVerticalHeaderLabels(self.pre_forecasting.grammar.non_terminal_symbol)
+            for y, non in enumerate(self.pre_forecasting.grammar.non_terminal_symbol):
+                self.pre_follow_table.insertRow(y)
                 for x, ter in enumerate(ter_list):
                     t = self.pre_forecasting.follow_set[non]
                     if ter in t:
@@ -356,6 +372,159 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(e)
 
+    def lr_stup(self):
+        self.lr_frame = QFrame()
+        frame_grid = QGridLayout()
+
+        self.lr_op_widget = QWidget(self.lr_frame)
+        self.lr_open_file_btn = QPushButton(self.lr_op_widget, text="Open")
+        self.lr_ok_grammar_btn = QPushButton(self.lr_op_widget, text="OK")
+        self.lr_items_btn = QPushButton(self.lr_op_widget, text="Items")
+        self.lr_table_btn = QPushButton(self.lr_op_widget, text="LR(0)Table")
+        gird_op = QGridLayout()
+        gird_op.addWidget(self.lr_open_file_btn, 0, 0)
+        gird_op.addWidget(self.lr_ok_grammar_btn, 0, 1)
+        gird_op.addWidget(self.lr_items_btn, 0, 2)
+        gird_op.addWidget(self.lr_table_btn, 0, 3)
+        self.lr_op_widget.setLayout(gird_op)
+
+        self.lr_edit_widget = QWidget(self.lr_frame)
+        lr_edit_grid = QGridLayout()
+
+        self.lr_edit = QTextEdit(self.lr_edit_widget)
+
+        self.lr_lineEdit = QLineEdit(self.lr_edit_widget, text="Input Statement")
+        self.lr_start_btn = QPushButton("Start")
+        self.lr_steup_btn = QPushButton("Steup")
+        self.lr_clear_btn = QPushButton("Clear")
+
+        lr_edit_grid.addWidget(self.lr_edit, 0, 0, 2, 3)
+        lr_edit_grid.addWidget(self.lr_lineEdit, 0, 4, 1, 3)
+        lr_edit_grid.addWidget(self.lr_steup_btn, 1, 4, 1, 1)
+        lr_edit_grid.addWidget(self.lr_start_btn, 1, 5, 1, 1)
+        lr_edit_grid.addWidget(self.lr_clear_btn, 1, 6, 1, 1)
+        self.lr_edit_widget.setLayout(lr_edit_grid)
+
+        self.lr_tables_widget = QWidget(self.lr_frame)
+        grid_tables = QGridLayout()
+        self.lr_items_table = QTableWidget()
+        self.lr_items_table.resizeColumnsToContents()
+        self.lr_items_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.lr_items_table.verticalHeader().setVisible(False)
+        self.lr_items_table.setColumnCount(2)
+        self.lr_items_table.setHorizontalHeaderLabels(['StateNo', 'Item Set'])
+
+        self.lr_table_table = QTableWidget()
+        self.lr_table_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.lr_table_table.verticalHeader().setVisible(False)
+
+        self.lr_analysis_table = QTableWidget()
+        self.lr_analysis_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.lr_analysis_table.verticalHeader().setVisible(False)
+        self.lr_analysis_table.setColumnCount(5)
+        self.lr_analysis_table.setHorizontalHeaderLabels(['StepNo', 'StateStack', 'SignStack', 'InputString', 'Info'])
+        grid_tables.addWidget(self.lr_items_table, 0, 0)
+        grid_tables.addWidget(self.lr_table_table, 0, 1)
+        grid_tables.addWidget(self.lr_analysis_table, 0, 2)
+        grid_tables.setColumnStretch(0, 2)
+        grid_tables.setColumnStretch(1, 3)
+        grid_tables.setColumnStretch(2, 4)
+        self.lr_tables_widget.setLayout(grid_tables)
+
+        frame_grid.addWidget(self.lr_op_widget, 0, 0)
+        frame_grid.addWidget(self.lr_edit_widget, 1, 0)
+        frame_grid.addWidget(self.lr_tables_widget, 2, 0)
+
+        self.lr_frame.setLayout(frame_grid)
+        self.lr_frame.show()
+        self.lr_seteup_action()
+
+    def lr_seteup_action(self):
+        self.lr_open_file_btn.clicked.connect(self.lr_open_file)
+        self.lr_ok_grammar_btn.clicked.connect(self.lr_ok_grammar)
+        self.lr_items_btn.clicked.connect(self.lr_items_start)
+        self.lr_table_btn.clicked.connect(self.lr_table_start)
+        self.lr_start_btn.clicked.connect(self.lr_start_analysis)
+        self.lr_steup_btn.clicked.connect(self.lr_steup_analysis)
+        self.lr_clear_btn.clicked.connect(self.lr_clear_tables)
+
+    def lr_open_file(self):
+        filename, _ = QFileDialog.getOpenFileName(self.lr_frame, "Open File", '',
+                                                  "All Files (*);;"
+                                                  "C++ Files (*.cpp *.h *.py);;"
+                                                  "Txt files (*.txt);;"
+                                                  "Python files (*.py);;"
+                                                  "HTML-Files (*.htm *.html)")
+        if filename:
+            try:
+                inFile = QFile(filename)
+                if inFile.open(QFile.ReadOnly | QFile.Text):
+                    text = inFile.readAll()
+                    text = str(text, encoding='utf-8')
+                    self.lr_edit.setPlainText(text)
+                    inFile.close()
+                    return True
+            except Exception as e:
+                QMessageBox.warning(self, "Text Editor -- Save Error",
+                                    "Failed to save {0}: {1}".format(self.filename, e))
+        return False
+
+    def lr_ok_grammar(self):
+        try:
+            self.lr_analysis = LR0(text=self.lr_edit.toPlainText())
+        except Exception as e:
+            print(e)
+
+    def lr_items_start(self):
+        try:
+            self.lr_analysis.create_dfa()
+            list_items = self.lr_analysis.dfa.get_items_show(self.lr_analysis.grammar.grammar_list)
+            for index, i in enumerate(list_items):
+                try:
+                    self.lr_items_table.insertRow(index)
+                    self.lr_items_table.setItem(index, 0, QTableWidgetItem(str(index)))
+                    self.lr_items_table.setItem(index, 1, QTableWidgetItem(i))
+                except Exception as e:
+                    print(e)
+            self.lr_items_table.resizeColumnsToContents()
+        except Exception as e:
+            print(e)
+
+    def lr_table_start(self):
+        try:
+            self.lr_analysis.create_lr0_table()
+            action = self.lr_analysis.action
+            goto = self.lr_analysis.goto
+            leng = len(self.lr_analysis.dfa.nfa_list)
+            h = ['State'] \
+                + self.lr_analysis.grammar.terminal_symbol \
+                + ['#'] \
+                + self.lr_analysis.grammar.non_terminal_symbol
+            row_len = len(h)
+            col_len = len(self.lr_analysis.dfa.nfa_list)
+            self.lr_table_table.setRowCount(row_len)
+            self.lr_table_table.setColumnCount(col_len)
+            self.lr_table_table.setHorizontalHeaderLabels(h)
+            for i in range(col_len):
+                self.lr_table_table.setItem(i, 0, QTableWidgetItem(str(i)))
+                dic = action[i]
+                t = list(dic.keys())
+                for v in t:
+                    self.lr_table_table.setItem(i, h.index(v), QTableWidgetItem(dic[v]))
+                dic = goto[i]
+                t = list(dic.keys())
+                for v in t:
+                    self.lr_table_table.setItem(i, h.index(v), QTableWidgetItem(str(dic[v])))
+            self.lr_table_table.resizeColumnsToContents()
+        except Exception as e:
+            print(e)
+    def lr_start_analysis(self):
+        pass
+    def lr_steup_analysis(self):
+        pass
+    def lr_clear_tables(self):
+        pass
+
     def show_toker_error_sign(self, token, error, sign):
         print(token)
         dock_name = QFileInfo(self.filename).fileName()
@@ -367,9 +536,12 @@ class MainWindow(QMainWindow):
             for i in error:
                 flag = 0
                 self.docwidget[dock_name]["error"].addItem(error_info[error_type[i[0]]] % i)
-            self.docwidget[dock_name]["sign"].addItem("Entry\tWord\tLength")
+            self.docwidget[dock_name]["sign"].addItem("Entry\tWord\tLength\tType")
             for index, i in enumerate(sign):
-                self.docwidget[dock_name]["sign"].addItem(str(index) + '\t' + i + '\t' + str(len(i)))
+                self.docwidget[dock_name]["sign"].addItem(str(index) + '\t'
+                                                          + i[0] + '\t'
+                                                          + str(len(i[0])) + '\t'
+                                                          + i[1])
         except Exception as e:
             print(e)
         if flag:
