@@ -1,0 +1,16 @@
+int a = 1*2+2*(3+4), b=5;
+int main()
+{
+int i;
+    if(!a>2||3&&a){
+        for(i=1;i<3;i= i+1)
+        {
+        }
+    }
+    c();
+    return 1;
+}
+int c()
+{
+int a = 4;
+}

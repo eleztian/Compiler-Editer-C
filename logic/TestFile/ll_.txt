@@ -1,0 +1,3 @@
+S->Ac|Be
+A->db|b
+B->da|a
