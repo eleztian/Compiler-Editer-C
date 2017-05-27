@@ -1,0 +1,50 @@
+digraph {
+	graph [fixedsize=true label=d rankdir=LR size="20,10"]
+	"[(0, -1), (2, -1), (1, -1), (3, -1)]"
+	"[(0, 0)]"
+	"[(5, -1), (2, 0), (4, -1)]"
+	"[(5, 0)]"
+	"[(2, 1)]"
+	"[(5, -1), (4, -1), (4, 0)]"
+	"[(4, 1)]"
+	"[(1, 0)]"
+	"[(3, 0), (7, -1), (6, -1)]"
+	"[(3, 1)]"
+	"[(7, 0)]"
+	"[(7, -1), (6, 0), (6, -1)]"
+	"[(6, 1)]"
+	1 [label=end1 shape=doubleoctagon]
+	3 [label=end3 shape=doubleoctagon]
+	4 [label=end4 shape=doubleoctagon]
+	3
+	6 [label=end6 shape=doubleoctagon]
+	7 [label=end7 shape=doubleoctagon]
+	9 [label=end9 shape=doubleoctagon]
+	10 [label=end10 shape=doubleoctagon]
+	10
+	12 [label=end12 shape=doubleoctagon]
+		0 -> 8 [label=b]
+		3 -> -2 [label=""]
+		12 -> -2 [label=""]
+		2 -> 5 [label=c]
+		9 -> -2 [label=""]
+		8 -> 11 [label=c]
+		8 -> 9 [label=B]
+		11 -> 10 [label=d]
+		7 -> -2 [label=""]
+		2 -> 3 [label=d]
+		5 -> 5 [label=c]
+		11 -> 11 [label=c]
+		0 -> 7 [label=E]
+		0 -> 1 [label=s]
+		4 -> -2 [label=""]
+		8 -> 10 [label=d]
+		11 -> 12 [label=B]
+		5 -> 3 [label=d]
+		1 -> -2 [label=""]
+		10 -> -2 [label=""]
+		6 -> -2 [label=""]
+		0 -> 2 [label=a]
+		5 -> 6 [label=A]
+		2 -> 4 [label=A]
+}

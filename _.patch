@@ -1,0 +1,1001 @@
+Index: logic/Complier.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- logic/Complier.py	(revision )
++++ logic/Complier.py	(revision )
+@@ -0,0 +1,13 @@
++from PyQt5.QtCore import QThread, pyqtSignal
++from logic.Lexer import Lexer
++from logic.Syner import Syner
++
++
++class Complier(QThread):
++    def __init__(self, filename):
++        self.filename = filename
++        self.lexer = Lexer(filename)
++        self.syner = Syner()
++
++    def run(self):
++        pass
+Index: logic/testfile.c
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- logic/testfile.c	(revision 229c28a65130ee142e99346ca86a41bbbef2ad1b)
++++ logic/testfile.c	(revision )
+@@ -1,16 +1,11 @@
+-/*fasfasdfasdfasdfasd*/
+-program example1;
+-var
+-    a,b,c:integer;
+-    x:3char+9;
+-@34 $12
+-3.14/6
+-3.
+-3.5E
+-.14
+-3e12 CH[X+2]  "STRING"
+-3.5e-3
++int a(int b){
++    if (a>3){
++        if (c>3){
++            if (d >5){}
++        }
++        while(3);
++    }
++    while(1);
++}
+ 
+-3.5e*7
+ 
+-'DFLJS'
+Index: mian.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- mian.py	(revision )
++++ mian.py	(revision )
+@@ -0,0 +1,9 @@
++
++dic = {
++    "+":1,
++    "3":2,
++}
++print(dic.get("+"))
++print(dic.get("*"))
++
++
+Index: logic/Syner.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- logic/Syner.py	(revision )
++++ logic/Syner.py	(revision )
+@@ -0,0 +1,368 @@
++"""
++    语法分析(递归下降) LL(1)
++"""
++from logic.Lexer import Lexer
++from logic.complier_s import code, delimiters, s_type, last_keyword_code, error_type, modifier, logic_sign
++
++
++class Syner(object):
++    now_token = None
++
++    def __init__(self, t, sign):
++        self.token = t
++        self.index = 0
++        self.sign_table = sign
++
++    # 获取下一个token值
++    def _token_next(self, chooseback=1):
++        line, word, co = None, None, None
++        if self.index < self.token.__len__():
++            line, word, co = self.token[self.index]
++            self.index += 1
++        else:
++            word = None
++        if chooseback == 1:
++            return word
++        else:
++            return line, word, co
++
++    def _token_redo(self):
++        if self.index > 0:
++            self.index -= 1
++
++    def _match(self, c):
++        t = self._token_next()
++        if t:
++            if t == c:
++                return True
++            else:
++                self._token_redo()
++                return False
++        return False
++
++    # 出错处理
++    def _error(self, error_type = ""):
++        print("error in ", self.token[self.index - 1], error_type)
++
++    # 定义数据
++    def define_id_s(self):
++        if self.modifier_s():
++            if self.type_s():
++                if self.id_s():
++                    self.define_id_right_value_or_not()
++                    self.define_id_closure()
++                else:
++                    self._error("no id")
++            else:
++                self._error('no type')
++        else:
++            if self.type_s():
++                if self.id_s():
++                    self.define_id_right_value_or_not()
++                    self.define_id_closure()
++                else:
++                    self._error("no id")
++            else:
++                return False
++        return True
++
++    # 一行里面的多个定义
++    def define_id_closure(self):
++        if self._match(','):
++            if self.id_s():
++                self.define_id_right_value_or_not()
++                self.define_id_closure()
++            else:
++                self._error("more ,")
++        else:
++            if not self._match(';'):
++                self._error("no ;")
++
++                # id
++
++    # 验证标识符
++    def id_s(self):
++        if self.index < self.token.__len__():
++            _, _, t = self.token[self.index]
++            self.index += 1
++            if t == code['id']:
++                return True
++            else:
++                self._token_redo()
++        return False
++
++        # 常数
++
++    # 数据定义初始化
++    def define_id_right_value_or_not(self):
++        if self._match('='):
++            if not self.right_value():
++                self._error('no value')
++                return False
++        return True
++
++    # 数据值
++    def right_value(self):
++        if self.index < self.token.__len__():
++            _, _, t = self.token[self.index]
++            self.index += 1
++            if t == code['id'] or t == code['charRealNum'] or t == code['constNum'] or t == code['string']:
++                return True
++            else:
++                self.index -= 1
++        return False
++
++        # 初始化右赋值语句
++
++    # 修饰词
++    def modifier_s(self):
++        c = self._token_next()
++        if c not in modifier:
++            self._token_redo()
++            return False
++        return True
++
++    # 数据类型
++    def type_s(self):
++        c = self._token_next()
++        if c not in s_type:
++            self._token_redo()
++            return False
++        return True
++
++    # 函数声明 <修饰词><类型><函数名>（<函数参数列表>）;
++    def fun_declaration_s(self):
++        if self.modifier_s():
++            flag = 1
++        else:
++            flag = 0
++            if not self.type_s():
++                if flag:
++                    self._error("no type")
++                else:
++                    return False  # 没有这个语句
++            if not self.id_s():
++                self._error("no id")
++            if not self._match('('):
++                self._error('no (')
++            self.fun_declaration_par_s()
++            if not self._match(')'):
++                self._error('no )')
++            if not self._match(';'):
++                self._error('no ;')
++        return True  # 有这个语句
++
++    # 函数参数列表
++    def fun_declaration_par_s(self):
++        if self.modifier_s():
++            flag = 1
++        else:
++            flag = 0
++        if not self.type_s():
++            if flag:
++                self._error("no type")
++            else:
++                return False  # 空
++        if not self.id_s():
++            self._error("no id")
++        self.define_id_right_value_or_not()
++        self.fun_declaration_par_closure()
++        return True
++
++    # 函数参数 (,<定义>)*
++    def fun_declaration_par_closure(self):
++        if self._match(','):
++            if not self.fun_declaration_par_s():
++                self._error("more ,")
++                return False
++            self.fun_declaration_par_closure()
++        return True
++
++    # 函数定义
++    def fun_define_s(self):
++        if self.modifier_s():
++            flag = 1
++        else:
++            flag = 0
++            if not self.type_s():
++                if flag:
++                    self._error("no type")
++                else:
++                    return False  # 没有这个语句
++            if not self.id_s():
++                self._error("no id")
++            if not self._match('('):
++                self._error('no (')
++            self.fun_declaration_par_s()
++            if not self._match(')'):
++                self._error('no )')
++            if not self._match('{'):
++                self._error('no {')
++            self.fun_block_s()
++            if not self._match('}'):
++                self._error('no }')
++        return True  # 有这个语句
++
++    # 表达式  <表达式> -> <因子> <项>
++    def exp_s(self):
++        self.yinzi_s()
++        self.xiang_s()
++
++    # <因子> -> <因式> <因式递归>
++    def yinzi_s(self):
++        self.yinshi_s()
++        self.yinshi_closure()
++
++    # < 项 > -> + < 因子 > < 项 > | - < 因子 > < 项 > | $
++    def xiang_s(self):
++        if self._match('+') or self._match('-'):
++            self.yinzi_s()
++        else:
++            pass  # $
++
++    # < 因式 > -> ( < 表达式 > ) | < id > | < 数字 >
++    def yinshi_s(self):
++        _, w, c = self._token_next(3)
++        if c == code['id'] or w.isdigit():
++            pass
++        else:
++            if w == '(':
++                self.exp_s()
++            else:
++                self._error("no (")
++            if not self._match(')'):
++                self._error('no )')
++
++    # <因式递归> -> * <因式> <因式递归> | / <因式> <因式递归> | $
++    def yinshi_closure(self):
++        if self._match('*') or self._match('/'):
++            self.yinshi_s()
++            self.yinshi_closure()
++
++    # < 右值 > -> < 表达式 > | { < 多个数据 >}
++    def right_value_s(self):
++        if self._match('{'):
++            self.many_value_s()
++            self._match('}')
++        else:
++            self.exp_s()
++
++    # <多个数据> -> <数字> <数字闭包>
++    def many_value_s(self):
++        w = self._token_next()
++        if w.isdigit():
++            self.many_value_closure()
++
++    # < 数字闭包 > ->, < 数字 > < 数字闭包 > | $
++    def many_value_closure(self):
++        if self._match(','):
++            w = self._token_next()
++            if w.isdigit():
++                self.many_value_closure()
++            else:
++                self._error('no number')
++
++    # <赋初值> -> = <右值> | $
++    def init_value_s(self):
++        if self._match('='):
++            self.right_value_s()
++        else:
++            pass
++
++    # < 声明 > -> < 修饰词 > < 类型 > < id > < 赋初值 >
++    def declare_s(self):
++        flag = 0
++        if self.modifier_s():
++            flag = 1
++        if self.type_s():
++            if flag:
++                self._error('no type')
++            if self.id_s():
++                self.init_value_s()
++                self.declare_closure()
++            else:
++                self._error('no id')
++            return True
++        return False
++
++    #  <声明闭包> -> , <id>  < 赋初值 > <声明闭包> | $
++    def declare_closure(self):
++        if self._match(','):
++            if self.id_s():
++                self.init_value_s()
++                self.declare_closure()
++            else:
++                self._error('more ,')
++            return True
++        else:
++            pass
++        return False
++
++    # < 声明语句 > -> < 声明 >;
++    def declare_2_s(self):
++        if self.declare_s():
++            if not self._match(';'):
++                self._error(' no ;')
++            else:
++                return True
++        return False
++
++    # < 声明语句闭包 > -> < 声明语句 > < 声明语句闭包 > | $
++    def declare_2_closure(self):
++        if self.declare_2_s():
++            self.declare_2_closure()
++        else:
++            pass
++
++    # TODO: 函数声明，函数声明闭包，函数定义， 出错处理（直接结束）
++
++    def start(self):
++        self.declare_2_closure()
++        print("a")
++
++    def scanner(self):
++        self.token_len = self.token.__len__()
++        state = 1
++        while self.index < self.token_len:
++            _, word, co = self.token[self.index]
++            if word in modifier:
++                flag = 0
++            else:
++                flag = 1
++            if word in s_type:
++                _, word, co = self.token[self.index]
++                while word == '*':
++                    state = 3
++                if co != code['id']:
++                    self._error('no id')
++                _, word, co = self.token[self.index]
++                if word == ';':
++                    pass
++                elif word == '[':
++                    if not self.right_value():
++                        self._error('no value')
++                    if not self._match(']'):
++                        self._error('no ]')
++
++                elif word == '(':
++                    state = 6
++                elif word == '=':
++                    state = 7
++                elif word == ',':
++                    state = 8
++            else:
++                if flag:
++                    self._error('more modifier')
++                break
++
++            self.index += 1
++
++
++
++if __name__ == '__main__':
++    lexer = Lexer("testfile.c")
++    lexer.run()
++    token = lexer.token
++    print(token)
++    syner = Syner(lexer.token, lexer.sign_table)
++    syner.start()
+Index: logic/LL1.txt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- logic/LL1.txt	(revision )
++++ logic/LL1.txt	(revision )
+@@ -0,0 +1,53 @@
++if( exp ) stmt else stmt
++    do stmt while( exp )
++    while( exp ) stmt
++    for( exp1; exp2; exp3 ) stmt
++    switch( exp ) stmt
++    goto lab
++
++    <函数定义> -> <修饰词> <类型> <id> ( <参数声明> ) { <函数块> }
++    <修饰词> -> <modifier>
++    <类型> -> <type> <取地址>
++    <取地址> -> * <取地址> | $
++    <参数声明> -> <声明> <声明闭包> | $
++    <声明> -> <修饰词> <类型> <id> <赋初值>
++    <声明闭包> -> , <声明> <声明闭包> | $
++    <赋初值> -> = <右值> | $
++    <右值> -> <表达式> | { <多个数据> }
++    <多个数据> -> <数字> <数字闭包>
++    <数字闭包> -> , <数字> <数字闭包> | $
++
++    <表达式> -> <因子> <项>
++
++    <因子> -> <因式> <因式递归>
++    <项> -> + <因子> <项> | - <因子> <项> | $
++    <因式> -> ( <表达式> ) | <id> | <数字>
++    <因式递归> -> * <因式> <因式递归> | / <因式> <因式递归> | $
++
++    <赋值函数> -> <变量> <赋值或函数调用>
++    <赋值或函数调用> -> = <右值> ; | ( <参数列表> ) ;
++
++    <数组下标> -> [ <因式> ] | $
++    <数字> -> digit
++
++    <声明语句闭包> -> <声明语句> <声明语句闭包> | $
++    <声明语句> -> <声明> ;
++
++    <函数块> -> <声明语句闭包> <函数块闭包>
++
++
++
++    <函数块闭包> -> <赋值函数> <函数块闭包> | <for循环> <函数块闭包> | <条件语句> <函数块闭包> | <函数返回> <函数块闭包> | $
++
++    <参数列表> -> <参数> <参数闭包>
++    <参数闭包> -> , <参数> <参数闭包> | $
++    <参数> -> <标志符> | <数字> | <字符串>
++    <字符串> -> string
++    <for循环> -> for ( <赋值函数> <逻辑表达式> ; <后缀表达式> ) { <函数块> }
++    <逻辑表达式> -> <表达式> <逻辑运算符> <表达式>
++    <逻辑运算符> -> < | > | == | !=
++    <后缀表达式> -> <变量> <后缀运算符>
++    <后缀运算符> -> ++ | --
++    <条件语句> -> if ( <逻辑表达式> ) { <函数块> } <否则语句>
++    <否则语句> -> else { <函数块> } | $
++    <函数返回> -> return <因式> ;
+Index: logic/Lexer.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- logic/Lexer.py	(revision 229c28a65130ee142e99346ca86a41bbbef2ad1b)
++++ logic/Lexer.py	(revision )
+@@ -28,101 +28,10 @@
+ '''
+ 
+ from PyQt5.QtCore import QThread, pyqtSignal
+-
++from logic import complier_s
+ 
+ class Lexer(QThread):
+-    _code = {
+-        'char': 1,
+-        'double': 2,
+-        'enum': 3,
+-        'float': 4,
+-        'int': 5,
+-        'long': 6,
+-        'short': 7,
+-        'signed': 8,
+-        'struct': 9,
+-        'union': 10,
+-        'unsigned': 11,
+-        'void': 12,
+-        'for': 13,
+-        'do': 14,
+-        'while': 15,
+-        'continue': 16,
+-        'if': 17,
+-        'else': 18,
+-        'goto': 19,
+-        'switch': 20,
+-        'case': 21,
+-        'default': 22,
+-        'return': 23,
+-        'auto': 24,
+-        'extern': 25,
+-        'register': 26,
+-        'static': 27,
+-        'const': 28,
+-        'sizeof': 29,
+-        'typdef': 30,
+-        'volatile': 31,
+-        'break': 32,  # 关键字
+-        '+': 33,
+-        '-': 34,
+-        '*': 35,
+-        '/': 36,
+-        '=': 37,
+-        '|': 38,
+-        '&': 39,
+-        '!': 40,
+-        '>': 41,
+-        '<': 42,
+-        '&&': 43,
+-        '++': 44,
+-        '--': 45,
+-        '+=': 46,
+-        '-=': 47,
+-        '*=': 48,
+-        '/=': 49,
+-        '==': 50,
+-        '|=': 51,
+-        '&=': 52,
+-        '!=': 53,
+-        '>=': 54,
+-        '<=': 55,
+-        '>>=': 56,
+-        '<<=': 57,
+-        '||': 58,
+-        '%': 59,  # 运算符
+-        '>>': 60,
+-        '<<': 61,
+-        ',': 62,
+-        '(': 63,
+-        ')': 64,
+-        '{': 65,
+-        '}': 66,
+-        '[': 67,
+-        ']': 68,
+-        ';': 69,
+-        '//': 70,
+-        '/*': 71,
+-        '*/': 72,
+-        ':': 73,
+-        '.': 74,
+-        '\\': 75,  # 界符
+-        'constNum': 76,
+-        'charRealNum': 77,
+-        'string': 78,
+-        'id': 79
+-    }  # 内码表
+-    _basic_arithmetic_operator = {
+-        '+', '-', '*', '=', '|', '&', '>', '<', '!', '%'
+-    }  # 符号表
+-    _delimiters = {
+-        ';', ',', ':', '(', ')', '{', '}', '[', ']', '<', '>', '.', '\\'
+-    }  # 界符表
+-    _error_info = [
+-        "错误 %d: 第 %d 行缺少  %s  ;",
+-        "错误 %d: 第 %d 行多余  %s  ;",
+-        "错误 %d: 第 %d 行不能识别的字符  %s  ;"
+-    ]  # 错误信息格式列表
++
+     sinOut = pyqtSignal(list, list, set)
+ 
+     def __init__(self, filename):
+@@ -153,10 +62,10 @@
+             self.current_row += 1
+         word = self.file_con[index: self.current_row]
+         try:
+-            t = self._code[word]   # 关键字
+-            self.sign_table.add(word)
++            t = complier_s.code[word]   # 关键字
+         except:
+-            t = self._code['id']
++            t = complier_s.code['id']
++            self.sign_table.add(word)
+         self.token.append((self.current_line, word, t))
+ 
+         self.current_row -= 1
+@@ -176,13 +85,17 @@
+             if _state == 1:
+                 while _state == 1:
+                     c = get_next_char()
+-                    if c.isdigit():
+-                        pass
+-                    elif c == '.':
+-                        _state = 2
+-                    elif c == 'e' or c == 'E':
+-                        _state = 4
+-                    else:
++                    if c:
++                        if c.isdigit():
++                            pass
++                        elif c == '.':
++                            _state = 2
++                        elif c == 'e' or c == 'E':
++                            _state = 4
++                        else:
++                            _state = 7
++                    else:
++                        self.current_row += 1
+                         _state = 7
+             if _state == 2:
+                 while _state == 2:
+@@ -265,7 +178,7 @@
+             state = 1
+         isnum(state)
+         word = self.file_con[index:self.current_row]
+-        self.token.append((self.current_line, word, self._code['constNum']))
++        self.token.append((self.current_line, word, complier_s.code['constNum']))
+         self.sign_table.add(word)
+         self.current_row -= 1
+ 
+@@ -274,7 +187,7 @@
+             word = self.file_con[self.current_row+1]  # 超前检测
+             if word is not '\n' and self.current_row < self.file_con_len - 2:
+                 if self.file_con[self.current_row+2] == '\'':  # 超前 2位 检测
+-                    self.token.append((self.current_line, word, self._code['charRealNum']))
++                    self.token.append((self.current_line, word, complier_s.code['charRealNum']))
+                     self.sign_table.add(word)
+                     self.current_row += 2
+                 else:
+@@ -295,7 +208,7 @@
+         while self.current_row < self.file_con_len:
+             if self.file_con[self.current_row] is '\"':
+                 word = self.file_con[index:self.current_row]
+-                self.token.append((self.current_line, word, self._code['string']))
++                self.token.append((self.current_line, word, complier_s.code['string']))
+                 self.sign_table.add(word)
+                 break
+             elif self.file_con[self.current_row] is '\n':
+@@ -329,11 +242,11 @@
+                     break
+         elif ch == '=':  # /=
+             word = self.file_con[self.current_row-1:self.current_row+1]
+-            self.token.append((self.current_line, word, self._code['/=']))
++            self.token.append((self.current_line, word, complier_s.code['/=']))
+         else:  # / 除法
+             self.current_row -= 1
+             word = self.file_con[self.current_row]
+-            self.token.append((self.current_line, word, self._code['/']))
++            self.token.append((self.current_line, word, complier_s.code['/']))
+ 
+     def start_with_basic_arithmetic_operator(self):
+         ch = self.file_con[self.current_row]
+@@ -371,7 +284,7 @@
+         else:
+             return
+         word = self.file_con[index:self.current_row + 1]
+-        self.token.append((self.current_line, word, self._code[word]))
++        self.token.append((self.current_line, word, complier_s.code[word]))
+ 
+     def start_with_pre(self):
+         # TODO: 预编译 替换字符串
+@@ -384,7 +297,7 @@
+ 
+     def start_with_delimiter(self):
+         word = self.file_con[self.current_row]
+-        self.token.append((self.current_line, word, self._code[word]))
++        self.token.append((self.current_line, word, complier_s.code[word]))
+ 
+     def scanner(self):
+         self.current_row = 0
+@@ -405,9 +318,9 @@
+                     self.start_with_sign_char()
+                 elif ch == '\"':  # 字符串
+                     self.start_with_sign_string()
+-                elif ch in self._basic_arithmetic_operator:  # 算数运算符
++                elif ch in complier_s.basic_arithmetic_operator:  # 算数运算符
+                     self.start_with_basic_arithmetic_operator()
+-                elif ch in self._delimiters:
++                elif ch in complier_s.delimiters:
+                     self.start_with_delimiter()
+                 else:
+                     self.error.append((2, self.current_line, ch))
+Index: ui_pyqt5/texteditor.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- ui_pyqt5/texteditor.py	(revision 229c28a65130ee142e99346ca86a41bbbef2ad1b)
++++ ui_pyqt5/texteditor.py	(revision )
+@@ -1,21 +1,24 @@
+ import sys
+ 
+-from PyQt5.QtCore import (QFile, QFileInfo, QSettings, QTimer, Qt, QByteArray,QThread,QThreadPool)
++from PyQt5.QtCore import (QFile, QFileInfo, QSettings, QTimer, Qt, QByteArray,QThread)
+ from PyQt5.QtGui import QIcon, QKeySequence, QTextDocumentWriter,QTextCursor,QTextBlock
+ from PyQt5.QtWidgets import (QAction, QApplication, QFileDialog, QGridLayout,
+                              QMainWindow, QMessageBox, QTextEdit, QTabWidget,
+-                             QWidget, QDockWidget, QTabBar,QPlainTextEdit,QLabel,QListWidget)
+-import threading
++                             QWidget, QDockWidget, QTabBar,QListWidget)
+ from logic.Lexer import Lexer
++from logic.Syner_v2 import Syner
+ from ui_pyqt5.bterEdit import BterEdit
++from ui_pyqt5 import  textedit_rc
++from logic.complier_s import error_info, error_type
+ 
+ __version__ = "1.0.0"
+-
+ rsrcfilename = ":/images/win"
+ 
++
+ class MainWindow(QMainWindow):
+     filename = ""
+     docwidget = {}
++
+     def __init__(self, parent=None):
+         super(MainWindow, self).__init__(parent)
+         self.setWindowIcon(QIcon(':/images/logo.png'))
+@@ -53,6 +56,7 @@
+         ret = msgBox.exec()
+         if ret == QMessageBox.Save:
+             self.fileSave()
++            self.tab.removeTab(index)
+         elif ret == QMessageBox.Discard:
+             self.tab.removeTab(index)
+             self.layout.addWidget(self.tab)
+@@ -173,18 +177,34 @@
+ 
+     def show_toker_error_sign(self, token, error, sign):
+         dock_name = QFileInfo(self.filename).fileName()
+-        print(dock_name)
++        flag = 1
+         try:
+             self.docwidget[dock_name]["token"].addItem("LineNo\tWord\tCode")
+             for i in token:
+                 self.docwidget[dock_name]["token"].addItem(str(i[0]) + '\t' + i[1] + '\t' + str(i[2]))
+             for i in error:
+-                self.docwidget[dock_name]["error"].addItem(self.lexer._error_info[i[0]] % i)
++                flag = 0
++                self.docwidget[dock_name]["error"].addItem(error_info[error_type[i[0]]] % i)
+             self.docwidget[dock_name]["sign"].addItem("Entry\tWord\tLength")
+             for index, i in enumerate(sign):
+                 self.docwidget[dock_name]["sign"].addItem(str(index) + '\t' + i + '\t' + str(len(i)))
+         except Exception as e:
+             print(e)
++        if flag:
++            try:
++                self.syner = Syner(token, sign)
++                self.syner.SynerOut.connect(self.showSyner_info)
++                self.syner.start()
++            except Exception as e:
++                print(e)
++
++    def showSyner_info(self, log, error):
++        dock_name = QFileInfo(self.filename).fileName()
++        print('syner finished')
++        for i in error:
++            self.docwidget[dock_name]["error"].addItem(i)
++        for i in log:
++            self.docwidget[dock_name]["log"].addItem(i)
+ 
+     def token_list_double_clicked_fun(self, item):
+         line_no = int(str(item.text()).split('\t')[0])
+@@ -201,7 +221,7 @@
+             print(e)
+ 
+     def error_list_double_clicked_fun(self, item):
+-        # print(str(item.text()).split(" "))
++        print(str(item.text()).split(" "))
+         line_no = int(str(item.text()).split(' ')[3])
+         try:
+             edit = self.tab.currentWidget().e_edit
+@@ -220,9 +240,8 @@
+         token = QListWidget()
+         error = QListWidget()
+         sign = QListWidget()
+-
+-
+-        self.docwidget[dock_name] = {"token": token, "error": error, "sign": sign}
++        log = QListWidget()
++        self.docwidget[dock_name] = {"token": token, "error": error, "sign": sign, "log": log}
+         token.itemDoubleClicked.connect(self.token_list_double_clicked_fun)
+         error.itemDoubleClicked.connect(self.error_list_double_clicked_fun)
+         try:
+@@ -230,12 +249,11 @@
+         except Exception as e:
+             print(e)
+         self.lexer = Lexer(self.filename)
+-        # print(self.filename)
+-        self.lexer.sinOut.connect(self.show_toker_error_sign)
+         try:
++            self.lexer.sinOut.connect(self.show_toker_error_sign)
+             self.lexer.start()
+         except Exception as e:
+-            print(e)
++            print("Start Lexer Error:", e)
+         dock_token = QDockWidget(dock_name+"_Token")  # 实例化dockwidget类
+         dock_token.setWidget(self.docwidget[dock_name]["token"])  # 带入的参数为一个QWidget窗体实例，将该窗体放入dock中
+         dock_token.setObjectName(dock_name)
+@@ -253,8 +271,16 @@
+         dock_sign.setObjectName(dock_name)
+         dock_sign.setFeatures(dock_sign.AllDockWidgetFeatures)
+         self.addDockWidget(Qt.RightDockWidgetArea, dock_sign)
++
++        dock_log = QDockWidget(dock_name + "_log")
++        dock_log.setWidget(self.docwidget[dock_name]["log"])
++        dock_log.setObjectName(dock_name)
++        dock_log.setFeatures(dock_log.AllDockWidgetFeatures)
++        self.addDockWidget(Qt.RightDockWidgetArea, dock_log)
++
+         self.tabifyDockWidget(dock_token, dock_error)
+         self.tabifyDockWidget(dock_error, dock_sign)
++        self.tabifyDockWidget(dock_sign, dock_log)
+ 
+     def closeEvent(self, event):
+         failures = []
+@@ -331,11 +357,11 @@
+ 
+     def fileOpen(self):
+         filename, _ = QFileDialog.getOpenFileName(self, "Open File", '',
++                                                       "All Files (*);;"
+                                                        "C++ Files (*.cpp *.h *.py);;"
+                                                        "Txt files (*.txt);;"
+                                                        "Python files (*.py);;"
+-                                                       "HTML-Files (*.htm *.html);;"
+-                                                       "All Files (*)")
++                                                       "HTML-Files (*.htm *.html)")
+         if filename:
+             t = BterEdit()
+             t.filename = filename
+@@ -362,13 +388,16 @@
+             return True
+ 
+     def fileSave(self):
++        print(self.filename)
+         if not self.filename:
+             return self.fileSaveAs()
+         else:
+             writer = QTextDocumentWriter(self.filename)
+             success = writer.write(self.tab.currentWidget().e_edit.document())
++            print(success)
+             if success:
+                 self.tab.currentWidget().e_edit.document().setModified(False)
++                print("save")
+                 return True
+         return False
+ 
+Index: logic/complier_s.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- logic/complier_s.py	(revision )
++++ logic/complier_s.py	(revision )
+@@ -0,0 +1,99 @@
++code = {
++    'char': 1,
++    'double': 2,
++    'enum': 3,
++    'float': 4,
++    'int': 5,
++    'long': 6,
++    'short': 7,
++    'signed': 8,
++    'struct': 9,
++    'union': 10,
++    'unsigned': 11,
++    'void': 12,
++    'for': 13,
++    'do': 14,
++    'while': 15,
++    'continue': 16,
++    'if': 17,
++    'else': 18,
++    'goto': 19,
++    'switch': 20,
++    'case': 21,
++    'default': 22,
++    'return': 23,
++    'auto': 24,
++    'extern': 25,
++    'register': 26,
++    'static': 27,
++    'const': 28,
++    'sizeof': 29,
++    'typdef': 30,
++    'volatile': 31,
++    'break': 32,  # 关键字
++    '+': 33,
++    '-': 34,
++    '*': 35,
++    '/': 36,
++    '=': 37,
++    '|': 38,
++    '&': 39,
++    '!': 40,
++    '>': 41,
++    '<': 42,
++    '&&': 43,
++    '++': 44,
++    '--': 45,
++    '+=': 46,
++    '-=': 47,
++    '*=': 48,
++    '/=': 49,
++    '==': 50,
++    '|=': 51,
++    '&=': 52,
++    '!=': 53,
++    '>=': 54,
++    '<=': 55,
++    '>>=': 56,
++    '<<=': 57,
++    '||': 58,
++    '%': 59,  # 运算符
++    '>>': 60,
++    '<<': 61,
++    ',': 62,
++    '(': 63,
++    ')': 64,
++    '{': 65,
++    '}': 66,
++    '[': 67,
++    ']': 68,
++    ';': 69,
++    '//': 70,
++    '/*': 71,
++    '*/': 72,
++    ':': 73,
++    '.': 74,
++    '\\': 75,  # 界符
++    'constNum': 76,
++    'charRealNum': 77,
++    'string': 78,
++    'id': 79
++}  # 内码表
++basic_arithmetic_operator = {
++    '+', '-', '*', '=', '|', '&', '>', '<', '!', '%'
++}  # 符号表
++delimiters = {
++    ';', ',', ':', '(', ')', '{', '}', '[', ']', '<', '>', '.', '\\'
++}  # 界符表
++error_type =['miss', 'more', 'no_code', 'no_type', 'no_keyWord']
++error_info = {
++    error_type[0]: "错误 %d: 第 %d 行缺少  %s  ;",
++    error_type[1]: "错误 %d: 第 %d 行多余  %s  ;",
++    error_type[2]: "错误 %d: 第 %d 行不能识别的字符  %s  ;",
++    error_type[3]: "错误 %d: 第 %d 行没有 %s 的类型",
++    error_type[4]: ""
++}  # 错误信息格式列表
++modifier = ['const', 'static', 'register', 'auto', 'volatile', 'unsigned']
++s_type = ['char', 'int', 'double', 'float', 'short', 'long']
++logic_sign = ['>', '<', '==', '!=', '>=', '<=']
++last_keyword_code = 32

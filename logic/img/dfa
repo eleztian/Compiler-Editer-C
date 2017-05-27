@@ -1,0 +1,19 @@
+digraph {
+	graph [label=dfa rankdir=LR size="20,5"]
+	0 [label="Start&end0" shape=Mdiamond]
+	1 [label=end1 shape=doubleoctagon]
+	2 [label=end2 shape=doubleoctagon]
+	3 [label=end3 shape=doubleoctagon]
+	0
+	1
+	2
+	3
+		3 -> 3 [label=c]
+		0 -> 2 [label=b]
+		1 -> 1 [label=a]
+		2 -> 3 [label=c]
+		0 -> 1 [label=a]
+		1 -> 2 [label=b]
+		3 -> 2 [label=b]
+		2 -> 2 [label=b]
+}
