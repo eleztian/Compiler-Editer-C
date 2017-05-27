@@ -50,7 +50,6 @@ class Ll1Ui(QFrame):
         self.clear_all_btn = QPushButton("Clear")
         self.gird_w_r = QGridLayout()
 
-
         self.gird_f = QGridLayout()
 
         self.set_layout()
